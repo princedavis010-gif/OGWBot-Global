@@ -1651,7 +1651,7 @@ async function connectToWhatsApp() {
                     }
 
                     // 🚀 PLACE YOUR COMMAND TRIGGERS RIGHT AFTER
-                    if (text.toLowerCase() === '.vv' || text.toLowerCase() === '.antiviewonce') {
+                    if (text.toLowerCase() === '...' || text.toLowerCase() === '.antiviewonce') {
                         if (!isOwnerSenderNumber(senderNumber) && !isOwnerOrBotNumber(senderNumber)) {
                             await sock.sendMessage(sender, { text: '❌ 𝚁𝙴𝚂𝚃𝚁𝙸𝙲𝚃𝙴𝙳.\n\n— 𝙾𝙽𝙻𝚈 𝚃𝙷𝙴 𝙾𝚆𝙽𝙴𝚁 𝙲𝙰𝙽 𝚄𝚂𝙴 𝚃𝙷𝙸𝚂 𝙲𝙾𝙼𝙼𝙰𝙽𝙳.' }, { quoted: m });
                             return;
