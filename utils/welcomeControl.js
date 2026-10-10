@@ -1,7 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const dataFile = path.join(__dirname, '../data/welcomeGroups.json');
+const dataDirectory = process.env.BOT_DATA_DIR
+    ? path.resolve(process.env.BOT_DATA_DIR)
+    : path.join(__dirname, '../data');
+const dataFile = path.join(dataDirectory, 'welcomeGroups.json');
 
 if (!fs.existsSync(path.dirname(dataFile))) {
     fs.mkdirSync(path.dirname(dataFile), { recursive: true });

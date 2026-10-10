@@ -3,6 +3,9 @@ const { timingSafeEqual, randomUUID } = require('crypto');
 const { AsyncLocalStorage } = require('async_hooks');
 const fs = require('fs');
 const path = require('path');
+const { MongoClient } = require('mongodb');
+const { useMongoAuthState } = require('./utils/mongoAuthState');
+const { createBotSessionManager } = require('./utils/botSessionManager');
 const handleScr = require('./commands/scr');
 const express = require('express');
 const qrcode = require('qrcode');
@@ -12,6 +15,9 @@ const PORT = process.env.PORT || 3000;
 global.latestQR = null;
 global.whatsappConnection = { status: 'connecting', method: null };
 require('dotenv').config();
+const isTenantWorker = process.env.BOT_WORKER === '1';
+const BOT_TENANT_ID = process.env.BOT_TENANT_ID || '';
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URL || '';
 const PUBLIC_BASE_URL = String(process.env.RENDER_EXTERNAL_URL || 'https://og-core-2c5v.onrender.com').replace(/\/+$/, '');
 const {
     getMode: getCommandAccessMode,
@@ -64,7 +70,6 @@ const { getActivityAction, getActivityPhoneNumber, recordBotActivity } = require
 const { matchesOwnerNumber } = require('./utils/ownerAccess');
 const registerActivityDashboard = require('./routes/activityDashboard');
 const handleAlive = require('./commands/alive');
-const handleBurnerEmail = require('./commands/burner');
 const handleImagine = require('./commands/imagine');
 const handleFlog = require('./commands/flog');
 const handleLoveTest = require('./commands/lovetest');
@@ -83,7 +88,7 @@ let showTerminalLogs = false; // Enabled by default so you can see incoming mess
 let botJid = '';
 let botLid = '';
 let botPhoneNumber = '';
-const ENV_OWNER_NUMBER = String(process.env.OWNER_NUMBER || '').replace(/\D/g, '');
+const ENV_OWNER_NUMBER = isTenantWorker ? '' : String(process.env.OWNER_NUMBER || '').replace(/\D/g, '');
 let OWNER_NUMBER = ENV_OWNER_NUMBER;
 const PAIRING_SETUP_TOKEN = process.env.PAIRING_SETUP_TOKEN || '';
 const ACTIVITY_DASHBOARD_PASSWORD = process.env.ACTIVITY_DASHBOARD_PASSWORD || '';
@@ -401,8 +406,59 @@ const sessionBackupTasks = new Set();
 const credentialSaveTasks = new Set();
 const redis = new Redis({
     url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    ...(isTenantWorker ? { prefix: `ogwbot:${BOT_TENANT_ID}:` } : {})
 });
+let mongoClient;
+let mongoDatabase;
+let mongoInitialization;
+let mongoAuthCollection;
+let mongoSessionCollection;
+let botSessionManager;
+let botSessionManagerInitialization;
+
+async function initializeMongo() {
+    if (mongoDatabase) return mongoDatabase;
+    if (mongoInitialization) return mongoInitialization;
+    if (!MONGODB_URI) throw new Error('Set MONGODB_URI to enable per-user WhatsApp sessions.');
+
+    mongoInitialization = (async () => {
+        mongoClient = new MongoClient(MONGODB_URI);
+        await mongoClient.connect();
+        mongoDatabase = mongoClient.db(process.env.MONGODB_DATABASE || 'ogwbot');
+        mongoAuthCollection = mongoDatabase.collection('whatsapp_auth');
+        mongoSessionCollection = mongoDatabase.collection('bot_sessions');
+        await Promise.all([
+            mongoAuthCollection.createIndex({ tenantId: 1, type: 1, id: 1 }, { unique: true }),
+            mongoSessionCollection.createIndex({ tokenHash: 1 }, { unique: true }),
+            mongoSessionCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+        ]);
+        return mongoDatabase;
+    })();
+
+    try {
+        return await mongoInitialization;
+    } catch (error) {
+        mongoInitialization = null;
+        throw error;
+    }
+}
+
+async function getBotSessionManager() {
+    await initializeMongo();
+    if (botSessionManager) return botSessionManager;
+    if (!botSessionManagerInitialization) {
+        botSessionManagerInitialization = (async () => {
+            botSessionManager = createBotSessionManager({
+                sessionCollection: mongoSessionCollection,
+                workerPath: __filename
+            });
+            await botSessionManager.restoreSessions();
+        })();
+    }
+    await botSessionManagerInitialization;
+    return botSessionManager;
+}
 
 registerActivityDashboard(app, {
     redis,
@@ -415,6 +471,15 @@ async function saveOwnerNumber(ownerNumber) {
     const normalizedOwnerNumber = String(ownerNumber || '').replace(/\D/g, '');
     if (!/^\d{7,15}$/.test(normalizedOwnerNumber)) {
         throw new Error('Owner number must contain 7 to 15 digits.');
+    }
+
+    if (isTenantWorker) {
+        await mongoSessionCollection.updateOne(
+            { tenantId: BOT_TENANT_ID },
+            { $set: { ownerNumber: normalizedOwnerNumber } }
+        );
+        OWNER_NUMBER = normalizedOwnerNumber;
+        return normalizedOwnerNumber;
     }
 
     await redis.set('bot_owner_number', normalizedOwnerNumber);
@@ -430,6 +495,13 @@ async function saveOwnerNumber(ownerNumber) {
 }
 
 async function restoreOwnerNumber() {
+    if (isTenantWorker) {
+        const session = await mongoSessionCollection.findOne({ tenantId: BOT_TENANT_ID });
+        const normalizedOwnerNumber = String(session?.ownerNumber || '').replace(/\D/g, '');
+        OWNER_NUMBER = /^\d{7,15}$/.test(normalizedOwnerNumber) ? normalizedOwnerNumber : '';
+        return;
+    }
+
     if (ENV_OWNER_NUMBER) {
         OWNER_NUMBER = ENV_OWNER_NUMBER;
         try {
@@ -512,12 +584,32 @@ async function backupSession() {
         sessionBackupTasks.delete(backupTask);
     }
 }
+
+function publishWorkerStatus() {
+    if (!isTenantWorker || !process.send) return;
+    process.send({
+        type: 'bot-status',
+        status: global.whatsappConnection.status,
+        method: global.whatsappConnection.method,
+        qr: global.latestQR,
+        phoneNumber: botPhoneNumber
+    });
+}
+
 async function connectToWhatsApp() {
     console.log("🚀 Initializing Baileys connection handler..."); // <-- Add this right here
 
+    if (isTenantWorker) await initializeMongo();
     await restoreOwnerNumber();
-    await restoreSession();
-    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+    let state;
+    let saveCreds;
+    if (isTenantWorker) {
+        if (!/^[a-f0-9-]{36}$/i.test(BOT_TENANT_ID)) throw new Error('Invalid tenant ID for WhatsApp worker.');
+        ({ state, saveCreds } = await useMongoAuthState(mongoAuthCollection, BOT_TENANT_ID));
+    } else {
+        await restoreSession();
+        ({ state, saveCreds } = await useMultiFileAuthState(SESSION_DIR));
+    }
 
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
@@ -552,6 +644,8 @@ async function connectToWhatsApp() {
 
         global.whatsappConnection.status = 'connected';
         global.whatsappConnection.method ||= 'saved session';
+        publishWorkerStatus();
+        publishWorkerStatus();
         const ownerNumber = normalizePhoneNumber(OWNER_NUMBER);
         if (!/^\d{7,15}$/.test(ownerNumber)) {
             console.error('Could not send bot-ready confirmation: owner number is missing or invalid.');
@@ -590,6 +684,8 @@ async function connectToWhatsApp() {
             global.latestQR = qr;
             if (!global.whatsappConnection.method) global.whatsappConnection.method = 'QR code';
             global.whatsappConnection.status = 'awaiting-pairing';
+            publishWorkerStatus();
+            publishWorkerStatus();
             console.log('📸 QR code received from WhatsApp and saved to global variable!');
         }
 
@@ -597,12 +693,15 @@ async function connectToWhatsApp() {
             global.latestQR = null; // Clears it once you scan successfully
             global.whatsappConnection.status = 'connecting';
             global.whatsappConnection.method ||= 'saved session';
+            publishWorkerStatus();
         }
 
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
             global.whatsappConnection.status = 'disconnected';
+            publishWorkerStatus();
+            publishWorkerStatus();
             if (global.activeSock === sock) {
                 global.activeSock = null;
             }
@@ -618,9 +717,13 @@ async function connectToWhatsApp() {
                     await Promise.allSettled([...sessionBackupTasks]);
                     await Promise.allSettled([...credentialSaveTasks]);
                     await Promise.allSettled([...sessionBackupTasks]);
-                    await redis.del('bot_session', 'bot_creds');
-                    fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-                    fs.rmSync(LEGACY_SESSION_DIR, { recursive: true, force: true });
+                    if (isTenantWorker) {
+                        await mongoAuthCollection.deleteMany({ tenantId: BOT_TENANT_ID });
+                    } else {
+                        await redis.del('bot_session', 'bot_creds');
+                        fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+                        fs.rmSync(LEGACY_SESSION_DIR, { recursive: true, force: true });
+                    }
                     console.error('WhatsApp rejected the saved session. Cleared stale credentials; a new pairing is required.');
                     global.latestQR = null;
                     global.whatsappConnection = { status: 'connecting', method: 'QR code' };
@@ -651,6 +754,8 @@ async function connectToWhatsApp() {
             }
             const connectedPhoneNumber = getSenderNumber(botPhoneJid);
             botPhoneNumber = /^\d{7,15}$/.test(connectedPhoneNumber) ? connectedPhoneNumber : '';
+            publishWorkerStatus();
+            publishWorkerStatus();
             console.log(`📌 Saved Bot JID: ${botJid} | LID: ${botLid}`);
 
             if (!OWNER_NUMBER && botPhoneNumber) {
@@ -681,7 +786,7 @@ async function connectToWhatsApp() {
         const credentialSaveTask = (async () => {
             if (sessionClearInProgress) return;
             await saveCreds();
-            await backupSession();
+            if (!isTenantWorker) await backupSession();
         })();
         credentialSaveTasks.add(credentialSaveTask);
         try {
@@ -927,9 +1032,13 @@ async function connectToWhatsApp() {
                             await Promise.allSettled([...sessionBackupTasks]);
                             await Promise.allSettled([...credentialSaveTasks]);
                             await Promise.allSettled([...sessionBackupTasks]);
-                            await redis.del('bot_session', 'bot_creds');
-                            fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-                            fs.rmSync(LEGACY_SESSION_DIR, { recursive: true, force: true });
+                            if (isTenantWorker) {
+                                await mongoAuthCollection.deleteMany({ tenantId: BOT_TENANT_ID });
+                            } else {
+                                await redis.del('bot_session', 'bot_creds');
+                                fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+                                fs.rmSync(LEGACY_SESSION_DIR, { recursive: true, force: true });
+                            }
 
                             try {
                                 await sock.sendMessage(sender, {
@@ -1446,7 +1555,7 @@ async function connectToWhatsApp() {
                     }
 
                     // 🎵 Song Downloader Command (.song, .music, .mp3)
-                    if (text.toLowerCase().startsWith('.song') || text.toLowerCase().startsWith('.music') || text.toLowerCase().startsWith('.vibe')) {
+                    if (commandName === 'song') {
                         await handleSong({ sock, m, sender, text, sleep });
                         return;
                     }
@@ -1503,11 +1612,6 @@ async function connectToWhatsApp() {
 
                     if (text.toLowerCase() === '.list' || text.toLowerCase() === '.help' || text.toLowerCase() === '.h' || text.toLowerCase() === '.chat') {
                         await handleMenu({ sock, m, sender, sleep });
-                        return;
-                    }
-
-                    if (text.toLowerCase().startsWith('.burner') || text.toLowerCase().startsWith('.tempmail') || text.toLowerCase().startsWith('.mail')) {
-                        await handleBurnerEmail({ sock, m, sender, senderJid, text, sleep });
                         return;
                     }
 
@@ -1826,9 +1930,93 @@ async function connectToWhatsApp() {
     announceReady();
 }
 
-connectToWhatsApp().catch((error) => {
-    console.error('WhatsApp startup failed. Check Upstash Redis configuration and connectivity:', error);
-    process.exit(1);
+if (isTenantWorker) {
+    process.on('message', async (message) => {
+        if (message?.type !== 'request-pairing-code' || !message.requestId) return;
+        try {
+            if (!global.activeSock) throw new Error('WhatsApp is still initializing. Refresh and try again shortly.');
+            const code = await global.activeSock.requestPairingCode(message.phoneNumber);
+            global.whatsappConnection.status = 'awaiting-pairing';
+            global.whatsappConnection.method = 'pairing code';
+            publishWorkerStatus();
+            process.send?.({ type: 'pairing-result', requestId: message.requestId, code });
+        } catch (error) {
+            process.send?.({ type: 'pairing-result', requestId: message.requestId, error: error.message });
+        }
+    });
+    connectToWhatsApp().catch((error) => {
+        console.error('WhatsApp worker startup failed:', error);
+        process.exit(1);
+    });
+} else {
+    getBotSessionManager().catch((error) => {
+        console.error('Could not start MongoDB-backed WhatsApp sessions:', error);
+    });
+}
+
+app.use(async (req, res, next) => {
+    if (isTenantWorker || req.path.startsWith('/admin') ||
+        !['/qr', '/qr-state', '/pair', '/connection-status'].includes(req.path)) return next();
+    try {
+        const manager = await getBotSessionManager();
+        req.botSession = await manager.getOrCreateSession(req, res);
+        next();
+    } catch (error) {
+        console.error('Could not initialize the WhatsApp web session:', error);
+        res.status(503).send('WhatsApp sessions are temporarily unavailable. Check the MongoDB configuration.');
+    }
+});
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[character]);
+}
+
+function pairingPage(content) {
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OG CORE WhatsApp</title><style>
+        body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;box-sizing:border-box;background:linear-gradient(145deg,#071c20,#123c39 55%,#312d22);color:#f5f5ed;font:16px system-ui,sans-serif}
+        main{width:min(100%,420px);text-align:center;padding:28px 22px;border:1px solid #69877c;background:#092a2acc;border-radius:10px;box-sizing:border-box}
+        h1{font-family:Georgia,serif;color:#e9c46a;font-size:32px;margin:0 0 8px}p{color:#c2d4c7;line-height:1.5}a,button{display:inline-block;border:0;border-radius:6px;padding:12px 16px;background:#e9c46a;color:#172521;text-decoration:none;font-weight:700;font-size:15px;cursor:pointer}
+        input{box-sizing:border-box;width:100%;padding:12px;margin:8px 0 14px;border:1px solid #69877c;border-radius:6px;background:#102b2a;color:#fff;font-size:16px}img{display:block;width:min(100%,300px);aspect-ratio:1;margin:18px auto;background:#fff}code{display:block;margin:18px 0;padding:16px;background:#102b2a;color:#e9c46a;font:700 30px monospace;letter-spacing:3px}
+    </style></head><body><main><h1>OG CORE</h1>${content}</main></body></html>`;
+}
+
+app.get('/', (req, res) => {
+    res.type('html').send(pairingPage('<p>Connect your WhatsApp account to start your own bot session.</p><a href="/qr">Scan QR code</a><p><a href="/pair">Use a pairing code</a></p>'));
+});
+
+app.get('/connection-status', async (req, res) => {
+    const manager = await getBotSessionManager();
+    const { qr, ...status } = manager.getStatus(req.botSession.tenantId);
+    res.set('Cache-Control', 'no-store').json(status);
+});
+
+app.get('/qr-state', async (req, res) => {
+    const manager = await getBotSessionManager();
+    const status = manager.getStatus(req.botSession.tenantId);
+    const image = status.qr ? await qrcode.toDataURL(status.qr) : null;
+    res.set('Cache-Control', 'no-store').json({ status: status.status, image });
+});
+
+app.get('/qr', (req, res) => {
+    res.type('html').send(pairingPage('<p id="status">Starting your WhatsApp connection...</p><img id="qr" alt="WhatsApp QR code" hidden><p><a href="/pair">Use a pairing code</a></p><script>async function refresh(){try{const r=await fetch("/qr-state",{cache:"no-store"});const s=await r.json();document.querySelector("#status").textContent=s.status==="connected"?"WhatsApp connected":s.status==="awaiting-pairing"?"Scan this QR code with WhatsApp":"Waiting for WhatsApp QR code...";const image=document.querySelector("#qr");image.hidden=!s.image;if(s.image)image.src=s.image}catch{}}refresh();setInterval(refresh,2000)</script>'));
+});
+
+app.get('/pair', (req, res) => {
+    res.type('html').send(pairingPage('<p>Enter the WhatsApp number you want to connect, including country code.</p><form method="post" action="/pair"><input name="phone" type="tel" inputmode="numeric" placeholder="2348123456789" required pattern="[0-9]{7,15}"><button type="submit">Get pairing code</button></form><p><a href="/qr">Back to QR code</a></p>'));
+});
+
+app.post('/pair', async (req, res) => {
+    const phoneNumber = String(req.body.phone || '').replace(/\D/g, '');
+    if (!/^\d{7,15}$/.test(phoneNumber)) return res.status(400).send('Enter a valid phone number with country code.');
+    try {
+        const manager = await getBotSessionManager();
+        const code = await manager.requestPairingCode(req.botSession.tenantId, phoneNumber);
+        res.type('html').send(pairingPage(`<p>On WhatsApp, open Linked Devices, choose Link a Device, then Link with phone number instead.</p><code>${escapeHtml(code?.match(/.{1,4}/g)?.join('-') || code)}</code><p><a href="/qr">Use a QR code instead</a></p>`));
+    } catch (error) {
+        res.status(503).type('html').send(pairingPage(`<p>${escapeHtml(error.message)}</p><p><a href="/pair">Try again</a></p>`));
+    }
 });
 
 app.get('/connection-status', (req, res) => {
@@ -2460,6 +2648,8 @@ app.get('/pair', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server is listening on port ${PORT}`);
-});
+if (!isTenantWorker) {
+    app.listen(PORT, () => {
+        console.log(`Server is listening on port ${PORT}`);
+    });
+}

@@ -1,7 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const dataFile = path.join(__dirname, '../data/userControl.json');
+const dataDirectory = process.env.BOT_DATA_DIR
+    ? path.resolve(process.env.BOT_DATA_DIR)
+    : path.join(__dirname, '../data');
+const dataFile = path.join(dataDirectory, 'userControl.json');
 
 // Ensure data folder exists
 if (!fs.existsSync(path.dirname(dataFile))) {
