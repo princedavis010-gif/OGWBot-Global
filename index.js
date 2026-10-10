@@ -451,6 +451,7 @@ async function getBotSessionManager() {
         botSessionManagerInitialization = (async () => {
             botSessionManager = createBotSessionManager({
                 sessionCollection: mongoSessionCollection,
+                authCollection: mongoAuthCollection,
                 workerPath: __filename
             });
             await botSessionManager.restoreSessions();
@@ -645,7 +646,6 @@ async function connectToWhatsApp() {
         global.whatsappConnection.status = 'connected';
         global.whatsappConnection.method ||= 'saved session';
         publishWorkerStatus();
-        publishWorkerStatus();
         const ownerNumber = normalizePhoneNumber(OWNER_NUMBER);
         if (!/^\d{7,15}$/.test(ownerNumber)) {
             console.error('Could not send bot-ready confirmation: owner number is missing or invalid.');
@@ -685,7 +685,6 @@ async function connectToWhatsApp() {
             if (!global.whatsappConnection.method) global.whatsappConnection.method = 'QR code';
             global.whatsappConnection.status = 'awaiting-pairing';
             publishWorkerStatus();
-            publishWorkerStatus();
             console.log('📸 QR code received from WhatsApp and saved to global variable!');
         }
 
@@ -700,7 +699,6 @@ async function connectToWhatsApp() {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
             global.whatsappConnection.status = 'disconnected';
-            publishWorkerStatus();
             publishWorkerStatus();
             if (global.activeSock === sock) {
                 global.activeSock = null;
@@ -754,7 +752,6 @@ async function connectToWhatsApp() {
             }
             const connectedPhoneNumber = getSenderNumber(botPhoneJid);
             botPhoneNumber = /^\d{7,15}$/.test(connectedPhoneNumber) ? connectedPhoneNumber : '';
-            publishWorkerStatus();
             publishWorkerStatus();
             console.log(`📌 Saved Bot JID: ${botJid} | LID: ${botLid}`);
 
@@ -1034,6 +1031,13 @@ async function connectToWhatsApp() {
                             await Promise.allSettled([...sessionBackupTasks]);
                             if (isTenantWorker) {
                                 await mongoAuthCollection.deleteMany({ tenantId: BOT_TENANT_ID });
+                                await mongoSessionCollection.updateOne(
+                                    { tenantId: BOT_TENANT_ID },
+                                    {
+                                        $set: { paired: false, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+                                        $unset: { pairedAt: '', phoneNumber: '' }
+                                    }
+                                );
                             } else {
                                 await redis.del('bot_session', 'bot_creds');
                                 fs.rmSync(SESSION_DIR, { recursive: true, force: true });
