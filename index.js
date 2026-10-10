@@ -465,6 +465,10 @@ registerActivityDashboard(app, {
     redis,
     password: ACTIVITY_DASHBOARD_PASSWORD,
     getConnectionStatus: () => global.whatsappConnection,
+    getSessionCollection: async () => {
+        await initializeMongo();
+        return mongoSessionCollection;
+    },
     resolveLid: (lid) => global.activeSock?.signalRepository?.lidMapping?.getPNForLID(lid)
 });
 
@@ -1663,7 +1667,7 @@ async function connectToWhatsApp() {
                             return;
                         }
                         if (await hasProtectedTarget({ sock, groupJid: sender, contextInfo, text })) {
-                            await sock.sendMessage(sender, { text: '❌ You cannot mute the owner.' }, { quoted: m });
+                            await sock.sendMessage(sender, { text: '❌ 𝚁𝙴𝚂𝚃𝚁𝙸𝙲𝚃𝙴𝙳.\n\n— 𝙾𝙽𝙻𝚈 𝚃𝙷𝙴 𝙾𝚆𝙽𝙴𝚁 𝙲𝙰𝙽 𝚄𝚂𝙴 𝚃𝙷𝙸𝚂 𝙲𝙾𝙼𝙼𝙰𝙽𝙳.' }, { quoted: m });
                             return;
                         }
                         await handleMute({ sock, m, sender, text, sleep, senderJid });

@@ -179,6 +179,7 @@ function adminPage() {
         <h1>OG CORE</h1>
         <h2>Admin Panel</h2>
         <a href="/admin/activity" target="_blank" class="btn">Activity Dashboard</a>
+        <a href="/admin/upgrade" class="btn">Upgrade Account</a>
         <a href="/" class="btn">Back to Home</a>
       <!--  <form class="logout-form" action="/admin/logout" method="POST">
             <button class="btn" type="submit">Sign out</button>
@@ -885,7 +886,15 @@ function dashboardPage() {
 </html>`;
 }
 
-function registerActivityDashboard(app, { redis, password, getConnectionStatus, getOwnerNumber, getBotNumbers }) {
+function upgradePage(message = '') {
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Upgrade account</title><style>
+        body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;box-sizing:border-box;background:#102b2a;color:#f5f5ed;font:16px system-ui,sans-serif}
+        main{width:min(100%,420px);padding:28px 24px;box-sizing:border-box;border:1px solid #69877c;border-radius:8px;background:#092321}
+        h1{margin:0 0 18px;color:#e9c46a;font:700 27px Georgia,serif}label{display:block;margin:14px 0 6px;color:#c2d4c7}input{box-sizing:border-box;width:100%;padding:12px;border:1px solid #69877c;border-radius:5px;background:#102b2a;color:#fff;font-size:16px}button{width:100%;margin-top:18px;padding:12px;border:0;border-radius:5px;background:#e9c46a;color:#172521;font-weight:700;font-size:15px;cursor:pointer}.message{line-height:1.5;color:#c2d4c7}
+    </style></head><body><main><h1>Upgrade a paired account</h1>${message ? `<p class="message">${message}</p>` : ''}<form method="post" action="/admin/upgrade"><label for="phoneNumber">Paired WhatsApp number</label><input id="phoneNumber" name="phoneNumber" type="tel" inputmode="numeric" pattern="[0-9]{7,15}" placeholder="2348123456789" required><button type="submit">Mark as premium</button></form><p><a href="/admin">Back to admin</a></p></main></body></html>`;
+}
+
+function registerActivityDashboard(app, { redis, password, getConnectionStatus, getOwnerNumber, getBotNumbers, getSessionCollection }) {
     const isEnabled = password.length >= 32;
     const isAuthenticated = (req) => isEnabled && hasValidSession(req, password);
 
@@ -908,6 +917,39 @@ function registerActivityDashboard(app, { redis, password, getConnectionStatus, 
         if (!isEnabled) return res.status(503).send('Activity dashboard is disabled. Configure ACTIVITY_DASHBOARD_PASSWORD in this deployment.');
         if (!isAuthenticated(req)) return res.redirect(303, '/admin/login');
         res.send(dashboardPage());
+    });
+
+    app.get('/admin/upgrade', (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isEnabled) return res.status(503).send('Admin panel is disabled. Configure ACTIVITY_DASHBOARD_PASSWORD in this deployment.');
+        if (!isAuthenticated(req)) return res.redirect(303, '/admin/login');
+        res.type('html').send(upgradePage());
+    });
+
+    app.post('/admin/upgrade', async (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isEnabled) return res.status(503).send('Admin panel is disabled. Configure ACTIVITY_DASHBOARD_PASSWORD in this deployment.');
+        if (!isAuthenticated(req)) return res.redirect(303, '/admin/login');
+
+        const phoneNumber = String(req.body.phoneNumber || '').replace(/\D/g, '');
+        if (!/^\d{7,15}$/.test(phoneNumber)) {
+            return res.status(400).send('Enter a valid WhatsApp number with country code.');
+        }
+
+        try {
+            const sessionCollection = await getSessionCollection();
+            const session = await sessionCollection.findOne({ paired: true, phoneNumber });
+            if (!session) return res.status(404).send('No paired bot session was found for that WhatsApp number.');
+
+            await sessionCollection.updateOne(
+                { tenantId: session.tenantId, paired: true },
+                { $set: { plan: 'premium', upgradedAt: new Date() } }
+            );
+            res.type('html').send(upgradePage(`WhatsApp number ending in ${phoneNumber.slice(-4)} is now marked as premium.`));
+        } catch (error) {
+            console.error('Could not upgrade WhatsApp session:', error);
+            res.status(503).send('Could not update the account. Check MongoDB connectivity and try again.');
+        }
     });
 
     const login = (req, res) => {
