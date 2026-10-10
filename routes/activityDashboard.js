@@ -886,12 +886,12 @@ function dashboardPage() {
 </html>`;
 }
 
-function upgradePage(message = '') {
+function upgradePage(message = '', phoneNumber = '') {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Upgrade account</title><style>
         body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;box-sizing:border-box;background:#102b2a;color:#f5f5ed;font:16px system-ui,sans-serif}
         main{width:min(100%,420px);padding:28px 24px;box-sizing:border-box;border:1px solid #69877c;border-radius:8px;background:#092321}
-        h1{margin:0 0 18px;color:#e9c46a;font:700 27px Georgia,serif}label{display:block;margin:14px 0 6px;color:#c2d4c7}input{box-sizing:border-box;width:100%;padding:12px;border:1px solid #69877c;border-radius:5px;background:#102b2a;color:#fff;font-size:16px}button{width:100%;margin-top:18px;padding:12px;border:0;border-radius:5px;background:#e9c46a;color:#172521;font-weight:700;font-size:15px;cursor:pointer}.message{line-height:1.5;color:#c2d4c7}
-    </style></head><body><main><h1>Upgrade a paired account</h1>${message ? `<p class="message">${message}</p>` : ''}<form method="post" action="/admin/upgrade"><label for="phoneNumber">Paired WhatsApp number</label><input id="phoneNumber" name="phoneNumber" type="tel" inputmode="numeric" pattern="[0-9]{7,15}" placeholder="2348123456789" required><button type="submit">Mark as premium</button></form><p><a href="/admin">Back to admin</a></p></main></body></html>`;
+        h1{margin:0 0 18px;color:#e9c46a;font:700 27px Georgia,serif}label{display:block;margin:14px 0 6px;color:#c2d4c7}input{box-sizing:border-box;width:100%;padding:12px;border:1px solid #69877c;border-radius:5px;background:#102b2a;color:#fff;font-size:16px}button{width:100%;margin-top:12px;padding:12px;border:0;border-radius:5px;background:#e9c46a;color:#172521;font-weight:700;font-size:15px;cursor:pointer}.secondary{background:transparent;color:#e9c46a;border:1px solid #69877c}.message{line-height:1.5;color:#c2d4c7}
+    </style></head><body><main><h1>Upgrade a paired account</h1>${message ? `<p class="message">${message}</p>` : ''}<form method="post" action="/admin/upgrade"><label for="phoneNumber">Paired WhatsApp number</label><input id="phoneNumber" name="phoneNumber" type="tel" inputmode="numeric" pattern="[0-9]{7,15}" placeholder="2348123456789" value="${phoneNumber}" required><button type="submit" name="action" value="premium">Mark as Premium</button><button class="secondary" type="submit" name="action" value="free">Unmark from Premium</button></form><p><a href="/admin">Back to admin</a></p></main></body></html>`;
 }
 
 function registerActivityDashboard(app, { redis, password, getConnectionStatus, getOwnerNumber, getBotNumbers, getSessionCollection }) {
@@ -935,17 +935,25 @@ function registerActivityDashboard(app, { redis, password, getConnectionStatus, 
         if (!/^\d{7,15}$/.test(phoneNumber)) {
             return res.status(400).send('Enter a valid WhatsApp number with country code.');
         }
+        const action = String(req.body.action || 'premium');
+        if (action !== 'premium' && action !== 'free') {
+            return res.status(400).send('Choose whether to mark or unmark premium status.');
+        }
 
         try {
             const sessionCollection = await getSessionCollection();
             const session = await sessionCollection.findOne({ paired: true, phoneNumber });
             if (!session) return res.status(404).send('No paired bot session was found for that WhatsApp number.');
 
+            const update = action === 'premium'
+                ? { $set: { plan: 'premium', upgradedAt: new Date() } }
+                : { $set: { plan: 'free' }, $unset: { upgradedAt: '' } };
             await sessionCollection.updateOne(
                 { tenantId: session.tenantId, paired: true },
-                { $set: { plan: 'premium', upgradedAt: new Date() } }
+                update
             );
-            res.type('html').send(upgradePage(`WhatsApp number ending in ${phoneNumber.slice(-4)} is now marked as premium.`));
+            const status = action === 'premium' ? 'marked as premium' : 'unmarked from premium';
+            res.type('html').send(upgradePage(`WhatsApp number ending in ${phoneNumber.slice(-4)} is now ${status}.`, phoneNumber));
         } catch (error) {
             console.error('Could not upgrade WhatsApp session:', error);
             res.status(503).send('Could not update the account. Check MongoDB connectivity and try again.');
