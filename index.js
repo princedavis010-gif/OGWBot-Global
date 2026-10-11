@@ -756,14 +756,19 @@ async function connectToWhatsApp() {
 
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const connectionWasReplaced = statusCode === DisconnectReason.connectionReplaced;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            global.whatsappConnection.status = 'disconnected';
+            connectionIsOpen = false;
+            global.latestQR = null;
+            global.whatsappConnection.status = connectionWasReplaced ? 'conflict' : 'disconnected';
             publishWorkerStatus();
             if (global.activeSock === sock) {
                 global.activeSock = null;
             }
             console.error(`Connection closed (status ${statusCode ?? 'unknown'}): ${lastDisconnect?.error?.message ?? 'unknown error'}`);
-            if (shouldReconnect) {
+            if (connectionWasReplaced) {
+                console.error('WhatsApp replaced this connection (440). Automatic retries are paused to avoid a conflict loop. Close any other bot process using this account. If the conflict persists, disconnect this account in Admin > Connected Accounts, then pair it again.');
+            } else if (shouldReconnect) {
                 connectToWhatsApp().catch((error) => {
                     console.error('WhatsApp reconnect failed:', error);
                     process.exit(1);
