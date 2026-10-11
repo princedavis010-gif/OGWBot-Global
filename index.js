@@ -1981,17 +1981,107 @@ function escapeHtml(value) {
     })[character]);
 }
 
-function pairingPage(content) {
-    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OG CORE WhatsApp</title><style>
-        body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;box-sizing:border-box;background:linear-gradient(145deg,#071c20,#123c39 55%,#312d22);color:#f5f5ed;font:16px system-ui,sans-serif}
-        main{width:min(100%,420px);text-align:center;padding:28px 22px;border:1px solid #69877c;background:#092a2acc;border-radius:10px;box-sizing:border-box}
-        h1{font-family:Georgia,serif;color:#e9c46a;font-size:32px;margin:0 0 8px}p{color:#c2d4c7;line-height:1.5}a,button{display:inline-block;border:0;border-radius:6px;padding:12px 16px;background:#e9c46a;color:#172521;text-decoration:none;font-weight:700;font-size:15px;cursor:pointer}
-        input{box-sizing:border-box;width:100%;padding:12px;margin:8px 0 14px;border:1px solid #69877c;border-radius:6px;background:#102b2a;color:#fff;font-size:16px}img{display:block;width:min(100%,300px);aspect-ratio:1;margin:18px auto;background:#fff}code{display:block;margin:18px 0;padding:16px;background:#102b2a;color:#e9c46a;font:700 30px monospace;letter-spacing:3px}
-    </style></head><body><main><h1>OG CORE</h1>${content}</main></body></html>`;
+function pairingPage(content, title = 'OG CORE') {
+    return `<!DOCTYPE html><html lang="en"><head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Fruktur:ital@0;1&family=Kavoon&family=Rubik+Dirt&family=Rubik+Doodle+Shadow&family=Rubik+Glitch&family=Rubik+Wet+Paint&display=swap" rel="stylesheet">
+        <title>${title}</title>
+        <style>
+            *{box-sizing:border-box}
+            body{min-height:100vh;margin:0;padding:50px 20px;display:grid;place-items:center;font-family:Arial,sans-serif;text-align:center;color:yellowgreen;background:linear-gradient(150deg,#0f172a,#1e1b4b 76%,#312e81);background-attachment:fixed}
+            .container{width:min(100%,400px);margin:0 auto;padding:30px;background:rgba(30,27,75,.4);border:1px solid rgba(255,255,255,.12);border-radius:10px}
+            h2{margin:0 0 20px;color:rgb(221,187,15);text-shadow:1px 1px #000;font-family:"Rubik Wet Paint",system-ui,sans-serif;font-size:32px;font-weight:400}
+            h3{margin:10px 0 5px;color:rgb(221,187,15);font-family:Kavoon,system-ui,sans-serif;font-size:18px}
+            p{margin:15px 0;color:rgb(19,221,150);font-family:Kavoon,system-ui,sans-serif;font-size:14px;line-height:1.5}
+            label{display:block;margin:12px 0 6px;color:rgb(19,221,150);font-family:Kavoon,system-ui,sans-serif;text-align:left}
+            a{font-family:Kavoon,system-ui,sans-serif}
+            .btn{display:block;margin:15px 0;padding:12px;border:0;border-radius:7px;background:#25d366;color:#fff;font-weight:700;text-decoration:none}
+            button{display:block;width:100%;margin:15px 0;padding:12px;border:0;border-radius:7px;background:#25d366;color:#fff;font-family:Kavoon,system-ui,sans-serif;font-size:15px;font-weight:700;cursor:pointer}
+            .btn:hover{filter:brightness(1.1)}.btn:focus-visible{outline:3px solid #e9c46a;outline-offset:3px}
+            input{width:100%;padding:12px;margin:8px 0 14px;border:1px solid #475569;border-radius:6px;background:#1e293b;color:#fff;font-size:16px}
+            .qr-image{width:min(300px,100%);height:auto;border:5px solid #25d366;border-radius:10px;background:#fff}
+            img[hidden]{display:none}code{display:block;margin:18px 0;padding:16px;border-radius:8px;background:#0f172a;color:rgb(221,187,15);font:700 30px monospace;letter-spacing:3px}
+            @media(max-width:480px){body{padding:32px 16px}.container{padding:24px 20px}h2{font-size:28px}}
+        </style>
+        </head><body><main class="container"><h2>${title}</h2>${content}</main></body></html>`;
 }
 
 app.get('/', (req, res) => {
-    res.type('html').send(pairingPage('<p>Connect your WhatsApp account to start your own bot session.</p><a href="/qr">Scan QR code</a><p><a href="/pair">Use a pairing code</a></p>'));
+    res.type('html').send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fruktur:ital@0;1&family=Kavoon&family=Rubik+Wet+Paint&display=swap" rel="stylesheet">
+    <title>OG CORE</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            min-height: 100vh;
+            margin: 0;
+            padding: 50px 20px;
+            display: grid;
+            place-items: center;
+            color: yellowgreen;
+            background: linear-gradient(150deg, #0f172a, #1e1b4b 76%, #312e81);
+            background-attachment: fixed;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        .container { width: min(100%, 400px); }
+        h1 {
+            margin: 0 0 18px;
+            color: rgb(221, 187, 15);
+            text-shadow: 1px 2px 0 #000;
+            font-family: "Rubik Wet Paint", system-ui, sans-serif;
+            font-size: 38px;
+            font-weight: 400;
+        }
+        #connection-status, p { color: rgb(19, 221, 150); }
+        #connection-status { min-height: 24px; }
+        .actions { margin-top: 26px; }
+        .btn {
+            display: block;
+            margin: 15px 0;
+            padding: 13px 16px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            font-family: Kavoon, system-ui, sans-serif;
+            font-size: 15px;
+            font-weight: 400;
+            text-decoration: none;
+            transition: filter 140ms ease, transform 140ms ease;
+        }
+        .btn:hover { filter: brightness(1.12); transform: translateY(-1px); }
+        .btn:focus-visible { outline: 3px solid #e9c46a; outline-offset: 3px; }
+        .btn-browser { background-color: #0088cc; color: white; }
+        .btn-pairing { background-color: #24292e; color: white; }
+        @media (max-width: 480px) {
+            body { padding: 32px 18px; }
+            h1 { font-size: 34px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .btn { transition: none; }
+        }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <h1>OG CORE</h1>
+        ${connectionStatusMarkup()}
+        <nav class="actions" aria-label="WhatsApp connection options">
+            <a href="/qr" class="btn btn-browser">Click here to scan QR</a>
+            <a href="/pair" class="btn btn-pairing">Click here to get Pairing Code</a>
+        </nav>
+    </main>
+</body>
+</html>`);
 });
 
 app.get('/connection-status', async (req, res) => {
@@ -2008,11 +2098,41 @@ app.get('/qr-state', async (req, res) => {
 });
 
 app.get('/qr', (req, res) => {
-    res.type('html').send(pairingPage('<p id="status">Starting your WhatsApp connection...</p><img id="qr" alt="WhatsApp QR code" hidden><p><a href="/pair">Use a pairing code</a></p><script>async function refresh(){try{const r=await fetch("/qr-state",{cache:"no-store"});const s=await r.json();document.querySelector("#status").textContent=s.status==="connected"?"WhatsApp connected":s.status==="awaiting-pairing"?"Scan this QR code with WhatsApp":"Waiting for WhatsApp QR code...";const image=document.querySelector("#qr");image.hidden=!s.image;if(s.image)image.src=s.image}catch{}}refresh();setInterval(refresh,2000)</script>'));
+    res.type('html').send(pairingPage(`${connectionStatusMarkup()}
+        <p id="qr-status" role="status">Waiting for WhatsApp QR code...</p>
+        <img class="qr-image" id="qr" alt="WhatsApp QR code" hidden>
+        <a href="/qr" class="btn">Refresh QR</a>
+        <a href="/pair" class="btn">Use pairing code</a>
+        <script>
+            async function refreshQr() {
+                try {
+                    const response = await fetch('/qr-state', { cache: 'no-store' });
+                    const state = await response.json();
+                    const status = document.getElementById('qr-status');
+                    const image = document.getElementById('qr');
+                    if (state.status === 'connected') status.textContent = 'WhatsApp is connected. The QR code is no longer needed.';
+                    else if (state.status === 'awaiting-pairing' && state.image) status.textContent = 'Scan this QR code with WhatsApp.';
+                    else status.textContent = 'Waiting for WhatsApp QR code...';
+                    image.hidden = !state.image;
+                    if (state.image && image.src !== state.image) image.src = state.image;
+                } catch {
+                    document.getElementById('qr-status').textContent = 'Unable to load the QR code. Refresh and try again.';
+                }
+            }
+            refreshQr();
+            setInterval(refreshQr, 2000);
+        </script>`, 'OG CORE - QR Scan'));
 });
 
 app.get('/pair', (req, res) => {
-    res.type('html').send(pairingPage('<p>Enter the WhatsApp number you want to connect, including country code.</p><form method="post" action="/pair"><input name="phone" type="tel" inputmode="numeric" placeholder="2348123456789" required pattern="[0-9]{7,15}"><button type="submit">Get pairing code</button></form><p><a href="/qr">Back to QR code</a></p>'));
+    res.type('html').send(pairingPage(`${connectionStatusMarkup()}
+        <form method="post" action="/pair">
+            <label for="phone">Bot WhatsApp number</label>
+            <input id="phone" name="phone" type="tel" inputmode="numeric" placeholder="e.g. 2348123456789" autocomplete="tel" required pattern="[0-9]{7,15}">
+            <button type="submit">Get pairing code</button>
+        </form>
+        <p>Use your country code without a plus sign.</p>
+        <a href="/qr" class="btn">Scan QR instead</a>`, 'OG CORE - Pairing Code'));
 });
 
 app.post('/pair', async (req, res) => {
@@ -2021,9 +2141,15 @@ app.post('/pair', async (req, res) => {
     try {
         const manager = await getBotSessionManager();
         const code = await manager.requestPairingCode(req.botSession.tenantId, phoneNumber);
-        res.type('html').send(pairingPage(`<p>On WhatsApp, open Linked Devices, choose Link a Device, then Link with phone number instead.</p><code>${escapeHtml(code?.match(/.{1,4}/g)?.join('-') || code)}</code><p><a href="/qr">Use a QR code instead</a></p>`));
+        res.type('html').send(pairingPage(`${connectionStatusMarkup()}
+            <h3>Your Pairing Code</h3>
+            <code>${escapeHtml(code?.match(/.{1,4}/g)?.join('-') || code)}</code>
+            <p>1. Open WhatsApp on your phone.</p>
+            <p>2. Go to <b>Linked Devices</b> &gt; <b>Link a Device</b> &gt; <b>Link with phone number instead</b>.</p>
+            <p>3. Enter this code in WhatsApp.</p>
+            <a href="/qr" class="btn">Use a QR code instead</a>`, 'OG CORE - Pairing Code'));
     } catch (error) {
-        res.status(503).type('html').send(pairingPage(`<p>${escapeHtml(error.message)}</p><p><a href="/pair">Try again</a></p>`));
+        res.status(503).type('html').send(pairingPage(`${connectionStatusMarkup()}<p>${escapeHtml(error.message)}</p><a href="/pair" class="btn">Try again</a>`, 'OG CORE - Pairing Code'));
     }
 });
 
