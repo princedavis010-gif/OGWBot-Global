@@ -1,5 +1,6 @@
 const USERS_KEY = 'ogwbot:global:users';
 const BLOCKED_USERS_KEY = 'ogwbot:global:blocked-users';
+const SUSPENDED_BOT_ACCOUNTS_KEY = 'ogwbot:global:suspended-bot-accounts';
 
 function normalizePhoneNumber(value) {
     return String(value || '').replace(/\D/g, '');
@@ -97,11 +98,26 @@ async function setGlobalUserBlocked(redis, phoneNumber, blocked) {
     else await redis.srem(BLOCKED_USERS_KEY, number);
 }
 
+async function isBotAccountSuspended(redis, phoneNumber) {
+    const number = normalizePhoneNumber(phoneNumber);
+    if (!/^\d{7,15}$/.test(number)) return false;
+    return Boolean(await redis.sismember(SUSPENDED_BOT_ACCOUNTS_KEY, number));
+}
+
+async function setBotAccountSuspended(redis, phoneNumber, suspended) {
+    const number = normalizePhoneNumber(phoneNumber);
+    if (!/^\d{7,15}$/.test(number)) return;
+    if (suspended) await redis.sadd(SUSPENDED_BOT_ACCOUNTS_KEY, number);
+    else await redis.srem(SUSPENDED_BOT_ACCOUNTS_KEY, number);
+}
+
 module.exports = {
     getGlobalUser,
     getGlobalUserEvents,
     getGlobalUsers,
+    isBotAccountSuspended,
     isGlobalUserBlocked,
     recordGlobalUser,
+    setBotAccountSuspended,
     setGlobalUserBlocked
 };

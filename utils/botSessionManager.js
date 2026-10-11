@@ -17,7 +17,7 @@ function readCookie(req) {
     return /^[a-f0-9]{64}$/.test(value || '') ? value : null;
 }
 
-function createBotSessionManager({ sessionCollection, authCollection, workerPath, env = process.env }) {
+function createBotSessionManager({ sessionCollection, authCollection, workerPath, env = process.env, isBotAccountSuspended = async () => false, setBotAccountSuspended = async () => {} }) {
     const workers = new Map();
     const pendingPairingRequests = new Map();
     const configuredMaxWorkers = Number.parseInt(env.BOT_MAX_WORKERS || '1', 10);
@@ -66,8 +66,30 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
         workers.set(tenantId, worker);
         refreshUnpairedTimeout(tenantId, worker);
 
-        child.on('message', (message) => {
+        child.on('message', async (message) => {
             if (message?.type === 'bot-status') {
+                if (worker.stopping) return;
+                if (message.status === 'connected') {
+                    let suspended = false;
+                    try {
+                        suspended = await isBotAccountSuspended(message.phoneNumber);
+                    } catch (error) {
+                        console.error('Could not check paired account suspension:', error.message);
+                    }
+                    if (suspended) {
+                        worker.stopping = true;
+                        worker.expiring = true;
+                        await Promise.allSettled([
+                            authCollection.deleteMany({ tenantId }),
+                            sessionCollection.updateOne(
+                                { tenantId },
+                                { $set: { paired: false, suspended: true, phoneNumber: message.phoneNumber } }
+                            )
+                        ]);
+                        child.kill('SIGTERM');
+                        return;
+                    }
+                }
                 worker.status = message.status || worker.status;
                 worker.method = message.method ?? worker.method;
                 if (Object.prototype.hasOwnProperty.call(message, 'qr')) worker.qr = message.qr;
@@ -137,6 +159,12 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
             ? await sessionCollection.findOne({ tokenHash: hashToken(token), expiresAt: { $gt: new Date() } })
             : null;
 
+        if (session?.suspended) {
+            const error = new Error('This connected account has been suspended by the administrator.');
+            error.code = 'SESSION_SUSPENDED';
+            throw error;
+        }
+
         if (!session) {
             token = randomBytes(32).toString('hex');
             session = {
@@ -180,27 +208,85 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
         const worker = workers.get(tenantId);
         return worker
             ? { status: worker.status, method: worker.method, phoneNumber: worker.phoneNumber, qr: worker.qr }
-            : { status: 'connecting', method: null, phoneNumber: null, qr: null };
+            : { status: 'disconnected', method: null, phoneNumber: null, qr: null };
+    }
+
+    async function disconnectSession(tenantId) {
+        const worker = workers.get(tenantId);
+        if (worker) {
+            clearTimeout(worker.unpairedTimeout);
+            worker.stopping = true;
+            worker.expiring = true;
+            const child = worker.child;
+            if (child && child.exitCode === null) {
+                const exited = new Promise((resolve) => {
+                    const timeout = setTimeout(resolve, 5000);
+                    child.once('exit', () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    });
+                });
+                child.kill('SIGTERM');
+                await exited;
+            }
+            if (workers.get(tenantId) === worker) workers.delete(tenantId);
+        }
+
+        await Promise.all([
+            authCollection.deleteMany({ tenantId }),
+            sessionCollection.updateOne(
+                { tenantId },
+                { $set: { paired: false, disconnectedAt: new Date() } }
+            )
+        ]);
+    }
+
+    async function setSessionSuspended(tenantId, suspended) {
+        const session = await sessionCollection.findOne({ tenantId });
+        if (!session) throw new Error('Connected account not found.');
+
+        if (suspended) {
+            await setBotAccountSuspended(session.phoneNumber, true);
+            await sessionCollection.updateOne({ tenantId }, { $set: { suspended: true } });
+            await disconnectSession(tenantId);
+            return;
+        }
+
+        await sessionCollection.updateOne({ tenantId }, { $unset: { suspended: '' } });
+        if (session.phoneNumber) {
+            const otherSuspendedSession = await sessionCollection.findOne({
+                tenantId: { $ne: tenantId },
+                phoneNumber: session.phoneNumber,
+                suspended: true
+            });
+            if (!otherSuspendedSession) await setBotAccountSuspended(session.phoneNumber, false);
+        }
     }
 
     function requestPairingCode(tenantId, phoneNumber) {
-        const worker = workers.get(tenantId) || startWorker(tenantId);
-        if (!worker.child?.connected) throw new Error('WhatsApp is still initializing. Refresh and try again shortly.');
+        return (async () => {
+            if (await isBotAccountSuspended(phoneNumber)) {
+                throw new Error('This WhatsApp account has been suspended by the administrator.');
+            }
 
-        const requestId = randomUUID();
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                pendingPairingRequests.delete(requestId);
-                reject(new Error('Pairing request timed out. Refresh and try again.'));
-            }, 30000);
-            pendingPairingRequests.set(requestId, { tenantId, resolve, reject, timeout });
-            worker.child.send({ type: 'request-pairing-code', requestId, phoneNumber }, (error) => {
-                if (!error) return;
-                clearTimeout(timeout);
-                pendingPairingRequests.delete(requestId);
-                reject(error);
+            const worker = workers.get(tenantId) || startWorker(tenantId);
+            if (!worker.child?.connected) throw new Error('WhatsApp is still initializing. Refresh and try again shortly.');
+
+            const requestId = randomUUID();
+            return new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    pendingPairingRequests.delete(requestId);
+                    reject(new Error('Pairing request timed out. Refresh and try again.'));
+                }, 30000);
+                pendingPairingRequests.set(requestId, { tenantId, resolve, reject, timeout });
+                worker.child.send({ type: 'request-pairing-code', requestId, phoneNumber }, (error) => {
+                    if (!error) return;
+                    clearTimeout(timeout);
+                    pendingPairingRequests.delete(requestId);
+                    reject(error);
+                });
             });
-        });
+        })();
     }
 
     function notifyPremiumUpgrade(tenantId) {
@@ -225,7 +311,15 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
         });
     }
 
-    return { getOrCreateSession, getStatus, notifyPremiumUpgrade, requestPairingCode, restoreSessions };
+    return {
+        disconnectSession,
+        getOrCreateSession,
+        getStatus,
+        notifyPremiumUpgrade,
+        requestPairingCode,
+        restoreSessions,
+        setSessionSuspended
+    };
 }
 
 module.exports = { createBotSessionManager };

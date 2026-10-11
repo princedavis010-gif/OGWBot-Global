@@ -67,7 +67,12 @@ const { handleFlirt } = require('./commands/flirt');
 const { handleTruth, handleDare } = require('./commands/truthDare');
 const checkAntiLink = require('./utils/antilink');
 const { getActivityAction, getActivityPhoneNumber, recordBotActivity } = require('./utils/activityLog');
-const { isGlobalUserBlocked, recordGlobalUser } = require('./utils/globalUserRegistry');
+const {
+    isBotAccountSuspended,
+    isGlobalUserBlocked,
+    recordGlobalUser,
+    setBotAccountSuspended
+} = require('./utils/globalUserRegistry');
 const { matchesOwnerNumber } = require('./utils/ownerAccess');
 const registerActivityDashboard = require('./routes/activityDashboard');
 const handleAlive = require('./commands/alive');
@@ -419,6 +424,7 @@ let mongoDatabase;
 let mongoInitialization;
 let mongoAuthCollection;
 let mongoSessionCollection;
+let tenantActivityPersistedAt = 0;
 let botSessionManager;
 let botSessionManagerInitialization;
 
@@ -457,7 +463,9 @@ async function getBotSessionManager() {
             botSessionManager = createBotSessionManager({
                 sessionCollection: mongoSessionCollection,
                 authCollection: mongoAuthCollection,
-                workerPath: __filename
+                workerPath: __filename,
+                isBotAccountSuspended: (phoneNumber) => isBotAccountSuspended(globalRedis, phoneNumber),
+                setBotAccountSuspended: (phoneNumber, suspended) => setBotAccountSuspended(globalRedis, phoneNumber, suspended)
             });
             await botSessionManager.restoreSessions();
         })();
@@ -479,8 +487,20 @@ registerActivityDashboard(app, {
         await initializeMongo();
         return mongoSessionCollection;
     },
+    getSessionManager: getBotSessionManager,
     resolveLid: (lid) => global.activeSock?.signalRepository?.lidMapping?.getPNForLID(lid)
 });
+
+function touchTenantActivity() {
+    if (!isTenantWorker || !mongoSessionCollection) return;
+    const now = Date.now();
+    if (now - tenantActivityPersistedAt < 60_000) return;
+    tenantActivityPersistedAt = now;
+    void mongoSessionCollection.updateOne(
+        { tenantId: BOT_TENANT_ID, paired: true },
+        { $set: { lastActivityAt: new Date(now) } }
+    ).catch((error) => console.error('Could not update tenant activity time:', error.message));
+}
 
 async function saveOwnerNumber(ownerNumber) {
     const normalizedOwnerNumber = String(ownerNumber || '').replace(/\D/g, '');
@@ -952,6 +972,7 @@ async function connectToWhatsApp() {
                 const contextInfo = getContextInfo();
                 const activityAction = getActivityAction({ text, contextInfo, botJid, botLid, getSenderNumber });
                 if (!m.key.fromMe) {
+                    touchTenantActivity();
                     void recordGlobalUser(globalRedis, {
                         phoneNumber: senderNumber,
                         name: senderName,
@@ -2051,6 +2072,9 @@ app.use(async (req, res, next) => {
         req.botSession = await manager.getOrCreateSession(req, res);
         next();
     } catch (error) {
+        if (error.code === 'SESSION_SUSPENDED') {
+            return res.status(403).send('This connected WhatsApp account has been suspended. Contact the site administrator.');
+        }
         console.error('Could not initialize the WhatsApp web session:', error);
         res.status(503).send('WhatsApp sessions are temporarily unavailable. Check the MongoDB configuration.');
     }

@@ -184,6 +184,7 @@ function adminPage() {
     <main class="container">
         <h1>OG CORE</h1>
         <h2>Admin Panel</h2>
+        <a href="/admin/connections" class="btn">Connected Accounts</a>
         <a href="/admin/users" class="btn">Global Users</a>
         <a href="/admin/activity" target="_blank" class="btn">Activity Dashboard</a>
         <a href="/admin/upgrade" class="btn">Upgrade Account</a>
@@ -953,7 +954,29 @@ function userDetailPage(phoneNumber) {
     </script></body></html>`;
 }
 
-function registerActivityDashboard(app, { redis, globalRedis = redis, password, getConnectionStatus, getOwnerNumber, getBotNumbers, getSessionCollection, notifySessionOwner }) {
+function connectionsPage() {
+    return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Connected Accounts | OG CORE</title>
+    <style>
+        :root{color-scheme:dark;--bg:#101716;--line:#34413d;--text:#edf3ef;--muted:#9aaba4;--green:#8fe0b5;--red:#ff8d82}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 12% 0%,#263b32 0,transparent 34%),var(--bg);color:var(--text);font:15px "Segoe UI",sans-serif}main{max-width:1120px;margin:auto;padding:36px 24px 56px}.top{display:flex;justify-content:space-between;gap:16px;margin-bottom:28px}.top a{color:var(--green);text-decoration:none}.eyebrow{color:var(--green);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}h1{font-size:30px;margin:8px 0 4px}p{color:var(--muted);margin:0}.toolbar{display:flex;align-items:center;gap:12px;margin:24px 0 12px}.toolbar input{flex:1;min-width:0;padding:12px 14px;border:1px solid var(--line);border-radius:5px;background:#121a17;color:var(--text);font:inherit}.count{color:var(--muted)}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:6px;background:rgba(25,33,31,.84)}table{width:100%;min-width:760px;border-collapse:collapse;text-align:left}th,td{padding:14px 16px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}tbody tr:last-child td{border:0}tbody tr:hover{background:#212d28}td a{color:var(--text);font-weight:600;text-decoration:none}td small{display:block;margin-top:4px;color:var(--muted)}.state{color:var(--green)}.state.off{color:#f5c86b}.state.suspended{color:var(--red)}.empty{padding:42px;text-align:center;color:var(--muted)}@media(max-width:600px){main{padding:26px 16px}.top{align-items:flex-start}.toolbar{align-items:stretch;flex-direction:column}.count{align-self:flex-end}}
+    </style></head><body><main><header class="top"><div><div class="eyebrow">OG CORE / administration</div><h1>Connected accounts</h1><p>Website sessions paired with WhatsApp accounts.</p></div><a href="/admin">Admin panel</a></header><section class="toolbar"><input id="search" type="search" placeholder="Search by WhatsApp number or session ID" aria-label="Search connected accounts"><span id="count" class="count">Loading accounts...</span></section><div class="table-wrap"><table><thead><tr><th>WhatsApp account</th><th>Connection</th><th>Last bot activity</th><th>Plan</th><th>Site access</th></tr></thead><tbody id="accounts"><tr><td colspan="5" class="empty">Loading accounts...</td></tr></tbody></table></div></main>
+    <script>
+        const body=document.getElementById('accounts'),search=document.getElementById('search');let accounts=[];function addCell(row,value){const cell=document.createElement('td');cell.textContent=value||'-';row.appendChild(cell);return cell}function render(){const query=search.value.trim().toLowerCase(),rows=accounts.filter(item=>(item.phoneNumber+' '+item.tenantId).toLowerCase().includes(query));body.replaceChildren();document.getElementById('count').textContent=rows.length+' of '+accounts.length+' accounts';if(!rows.length){const row=document.createElement('tr'),cell=addCell(row,accounts.length?'No accounts match your search.':'No WhatsApp accounts have been paired yet.');cell.colSpan=5;cell.className='empty';body.appendChild(row);return}for(const item of rows){const row=document.createElement('tr'),account=addCell(row,'');const link=document.createElement('a');link.href='/admin/connections/'+encodeURIComponent(item.tenantId);link.textContent=item.phoneNumber||'Number unavailable';account.appendChild(link);const id=document.createElement('small');id.textContent=item.tenantId;account.appendChild(id);const state=addCell(row,item.connectionStatus||'unknown');state.className='state'+(item.suspended?' suspended':item.paired?'':' off');addCell(row,item.lastActivityAt?new Date(item.lastActivityAt).toLocaleString():'No activity recorded');addCell(row,item.plan==='premium'?'Premium':'Free');const access=addCell(row,item.suspended?'Suspended':'Allowed');access.className='state'+(item.suspended?' suspended':'')} }async function refresh(){try{const response=await fetch('/admin/connections/data',{cache:'no-store'});if(response.status===401){location.href='/admin/login';return}if(!response.ok)throw new Error();accounts=await response.json();render()}catch{document.getElementById('count').textContent='Connected accounts unavailable'}}search.addEventListener('input',render);refresh();setInterval(refresh,5000);
+    </script></body></html>`;
+}
+
+function connectionDetailPage(tenantId) {
+    return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Connected Account | OG CORE</title>
+    <style>
+        :root{color-scheme:dark;--bg:#101716;--panel:#19211f;--line:#34413d;--text:#edf3ef;--muted:#9aaba4;--green:#8fe0b5;--red:#ff8d82}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 12% 0%,#263b32 0,transparent 34%),var(--bg);color:var(--text);font:15px "Segoe UI",sans-serif}main{max-width:900px;margin:auto;padding:36px 24px 56px}.top{display:flex;justify-content:space-between;gap:16px;margin-bottom:28px}.top a{color:var(--green);text-decoration:none}.eyebrow{color:var(--green);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}h1{font-size:30px;margin:8px 0 5px;overflow-wrap:anywhere}.muted{color:var(--muted);overflow-wrap:anywhere}.profile{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--line);margin:24px 0}.stat{min-height:88px;padding:17px;background:var(--panel)}.stat span{display:block;margin-bottom:8px;color:var(--muted);font-size:12px;text-transform:uppercase}.stat strong{overflow-wrap:anywhere}.actions{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0}button{padding:10px 14px;border:1px solid var(--line);border-radius:4px;background:#26352e;color:var(--text);font:inherit;font-weight:600;cursor:pointer}button.danger{background:#3b2524;border-color:#70403c;color:#ffb0a8}button.warn{background:#3b3424;border-color:#69582f;color:#f4d28b}.error{color:var(--red)}@media(max-width:600px){main{padding:26px 16px}.profile{grid-template-columns:1fr}.top{align-items:flex-start}}
+    </style></head><body><main><header class="top"><div><div class="eyebrow">OG CORE / connected accounts</div><h1 id="phone">Loading account...</h1><div class="muted">Site session: ${tenantId}</div></div><a href="/admin/connections">All accounts</a></header><div id="notice" class="muted"></div>
+    <section class="profile"><div class="stat"><span>WhatsApp connection</span><strong id="connection">Loading</strong></div><div class="stat"><span>Site access</span><strong id="access">Loading</strong></div><div class="stat"><span>Plan</span><strong id="plan">-</strong></div><div class="stat"><span>Site session created</span><strong id="created">-</strong></div><div class="stat"><span>WhatsApp paired</span><strong id="pairedAt">-</strong></div><div class="stat"><span>Last bot activity</span><strong id="activity">-</strong></div></section>
+    <div class="actions"><form id="disconnectForm" method="post"><button class="warn" type="submit">Disconnect bot session</button></form><form id="suspendForm" method="post"><button id="suspendButton" class="danger" type="submit">Suspend account</button></form></div>
+    <script>
+        const tenantId='${tenantId}';async function load(){try{const response=await fetch('/admin/connections/'+tenantId+'/data',{cache:'no-store'});if(response.status===401){location.href='/admin/login';return}if(response.status===404){document.getElementById('phone').textContent='Account not found';return}if(!response.ok)throw new Error();const item=await response.json();document.getElementById('phone').textContent=item.phoneNumber||'WhatsApp number unavailable';document.getElementById('connection').textContent=item.connectionStatus||'unknown';document.getElementById('access').textContent=item.suspended?'Suspended':'Allowed';document.getElementById('access').className=item.suspended?'error':'';document.getElementById('plan').textContent=item.plan==='premium'?'Premium':'Free';document.getElementById('created').textContent=item.createdAt?new Date(item.createdAt).toLocaleString():'-';document.getElementById('pairedAt').textContent=item.pairedAt?new Date(item.pairedAt).toLocaleString():'-';document.getElementById('activity').textContent=item.lastActivityAt?new Date(item.lastActivityAt).toLocaleString():'No activity recorded';document.getElementById('disconnectForm').action='/admin/connections/'+tenantId+'/disconnect';const suspendButton=document.getElementById('suspendButton');suspendButton.textContent=item.suspended?'Restore account':'Suspend account';suspendButton.className=item.suspended?'':'danger';document.getElementById('suspendForm').action='/admin/connections/'+tenantId+'/'+(item.suspended?'resume':'suspend')}catch{document.getElementById('notice').textContent='Could not load connected account details.'}}load();setInterval(load,5000);
+    </script></body></html>`;
+}
+
+function registerActivityDashboard(app, { redis, globalRedis = redis, password, getConnectionStatus, getOwnerNumber, getBotNumbers, getSessionCollection, getSessionManager, notifySessionOwner }) {
     const isEnabled = password.length >= 32;
     const isAuthenticated = (req) => isEnabled && hasValidSession(req, password);
 
@@ -1032,6 +1055,93 @@ function registerActivityDashboard(app, { redis, globalRedis = redis, password, 
         if (!isAuthenticated(req)) return res.redirect(303, '/admin/login');
         if (!/^\d{7,15}$/.test(req.params.phone)) return res.status(400).send('Invalid user number.');
         res.type('html').send(userDetailPage(req.params.phone));
+    });
+
+    app.get('/admin/connections', (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isEnabled) return res.status(503).send('Admin panel is disabled. Configure ACTIVITY_DASHBOARD_PASSWORD in this deployment.');
+        if (!isAuthenticated(req)) return res.redirect(303, '/admin/login');
+        res.type('html').send(connectionsPage());
+    });
+
+    app.get('/admin/connections/data', async (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isAuthenticated(req)) return res.status(401).json({ error: 'Unauthorized' });
+        try {
+            const [sessionCollection, manager] = await Promise.all([getSessionCollection(), getSessionManager()]);
+            const sessions = await sessionCollection.find({
+                $or: [{ paired: true }, { phoneNumber: { $exists: true } }, { suspended: true }]
+            }).sort({ lastActivityAt: -1, pairedAt: -1, createdAt: -1 }).limit(500).toArray();
+            res.json(sessions.map((session) => ({
+                tenantId: session.tenantId,
+                phoneNumber: session.phoneNumber || '',
+                paired: Boolean(session.paired),
+                pairedAt: session.pairedAt || null,
+                createdAt: session.createdAt || null,
+                lastActivityAt: session.lastActivityAt || null,
+                plan: session.plan === 'premium' ? 'premium' : 'free',
+                suspended: Boolean(session.suspended),
+                connectionStatus: manager.getStatus(session.tenantId).status
+            })));
+        } catch (error) {
+            console.error('Could not load connected accounts:', error.message);
+            res.status(503).json({ error: 'Connected accounts unavailable' });
+        }
+    });
+
+    app.get('/admin/connections/:tenantId/data', async (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isAuthenticated(req)) return res.status(401).json({ error: 'Unauthorized' });
+        if (!/^[a-f0-9-]{36}$/i.test(req.params.tenantId)) return res.status(400).json({ error: 'Invalid session ID' });
+        try {
+            const [sessionCollection, manager] = await Promise.all([getSessionCollection(), getSessionManager()]);
+            const session = await sessionCollection.findOne({ tenantId: req.params.tenantId });
+            if (!session) return res.status(404).json({ error: 'Connected account not found' });
+            res.json({
+                tenantId: session.tenantId,
+                phoneNumber: session.phoneNumber || '',
+                paired: Boolean(session.paired),
+                pairedAt: session.pairedAt || null,
+                createdAt: session.createdAt || null,
+                lastActivityAt: session.lastActivityAt || null,
+                plan: session.plan === 'premium' ? 'premium' : 'free',
+                suspended: Boolean(session.suspended),
+                connectionStatus: manager.getStatus(session.tenantId).status
+            });
+        } catch (error) {
+            console.error('Could not load connected account:', error.message);
+            res.status(503).json({ error: 'Connected account unavailable' });
+        }
+    });
+
+    const updateConnection = (action) => async (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isAuthenticated(req)) return res.redirect(303, '/admin/login');
+        if (!/^[a-f0-9-]{36}$/i.test(req.params.tenantId)) return res.status(400).send('Invalid session ID.');
+        try {
+            const sessionCollection = await getSessionCollection();
+            const session = await sessionCollection.findOne({ tenantId: req.params.tenantId });
+            if (!session) return res.status(404).send('Connected account not found.');
+            const manager = await getSessionManager();
+            if (action === 'disconnect') await manager.disconnectSession(req.params.tenantId);
+            else await manager.setSessionSuspended(req.params.tenantId, action === 'suspend');
+            res.redirect(303, `/admin/connections/${req.params.tenantId}`);
+        } catch (error) {
+            console.error('Could not update connected account:', error.message);
+            res.status(503).send('Could not update the connected account. Check MongoDB connectivity and try again.');
+        }
+    };
+
+    app.post('/admin/connections/:tenantId/disconnect', updateConnection('disconnect'));
+    app.post('/admin/connections/:tenantId/suspend', updateConnection('suspend'));
+    app.post('/admin/connections/:tenantId/resume', updateConnection('resume'));
+
+    app.get('/admin/connections/:tenantId', (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isEnabled) return res.status(503).send('Admin panel is disabled. Configure ACTIVITY_DASHBOARD_PASSWORD in this deployment.');
+        if (!isAuthenticated(req)) return res.redirect(303, '/admin/login');
+        if (!/^[a-f0-9-]{36}$/i.test(req.params.tenantId)) return res.status(400).send('Invalid session ID.');
+        res.type('html').send(connectionDetailPage(req.params.tenantId));
     });
 
     app.get('/admin/upgrade', (req, res) => {
