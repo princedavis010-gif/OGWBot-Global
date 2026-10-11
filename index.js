@@ -67,6 +67,7 @@ const { handleFlirt } = require('./commands/flirt');
 const { handleTruth, handleDare } = require('./commands/truthDare');
 const checkAntiLink = require('./utils/antilink');
 const { getActivityAction, getActivityPhoneNumber, recordBotActivity } = require('./utils/activityLog');
+const { isGlobalUserBlocked, recordGlobalUser } = require('./utils/globalUserRegistry');
 const { matchesOwnerNumber } = require('./utils/ownerAccess');
 const registerActivityDashboard = require('./routes/activityDashboard');
 const handleAlive = require('./commands/alive');
@@ -409,6 +410,10 @@ const redis = new Redis({
     token: process.env.UPSTASH_REDIS_REST_TOKEN,
     ...(isTenantWorker ? { prefix: `ogwbot:${BOT_TENANT_ID}:` } : {})
 });
+const globalRedis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN
+});
 let mongoClient;
 let mongoDatabase;
 let mongoInitialization;
@@ -463,6 +468,7 @@ async function getBotSessionManager() {
 
 registerActivityDashboard(app, {
     redis,
+    globalRedis,
     password: ACTIVITY_DASHBOARD_PASSWORD,
     getConnectionStatus: () => global.whatsappConnection,
     notifySessionOwner: async (tenantId) => {
@@ -944,6 +950,19 @@ async function connectToWhatsApp() {
                 };
 
                 const contextInfo = getContextInfo();
+                const activityAction = getActivityAction({ text, contextInfo, botJid, botLid, getSenderNumber });
+                if (!m.key.fromMe) {
+                    void recordGlobalUser(globalRedis, {
+                        phoneNumber: senderNumber,
+                        name: senderName,
+                        tenantId: BOT_TENANT_ID,
+                        botNumber: botPhoneNumber,
+                        chatJid: sender,
+                        action: activityAction || 'message'
+                    }).catch((error) => {
+                        console.error('Could not record global bot user:', error.message);
+                    });
+                }
                 if (!text && !contextInfo?.mentionedJid?.length && !contextInfo?.stanzaId) continue;
 
                 const botNumbers = [getSenderNumber(botJid), getSenderNumber(botLid)].filter(Boolean);
@@ -960,7 +979,6 @@ async function connectToWhatsApp() {
                     continue;
                 }
 
-                const activityAction = getActivityAction({ text, contextInfo, botJid, botLid, getSenderNumber });
                 const isCommandDelivery = /^\s*\./.test(text) ||
                     (activityAction && activityAction !== 'AI chat' && activityAction !== 'AI mention');
                 await outgoingMessageContext.run({
@@ -990,6 +1008,14 @@ async function connectToWhatsApp() {
                     if (isPrivateForSender(senderJid, senderNumber)) return;
 
                     if (isBlacklisted(senderNumber) && !isOwnerSenderNumber(senderNumber)) return;
+
+                    if (!isOwnerSenderNumber(senderNumber)) {
+                        try {
+                            if (await isGlobalUserBlocked(globalRedis, senderNumber)) return;
+                        } catch (error) {
+                            console.error('Could not check global user block status:', error.message);
+                        }
+                    }
 
                     if (!isAiGeneratedCommand && !isOwnerSenderNumber(senderNumber)) {
                         const usageCheck = checkAndIncrementUsage(senderNumber, OWNER_NUMBER);

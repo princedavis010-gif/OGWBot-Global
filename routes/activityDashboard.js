@@ -1,4 +1,10 @@
 const { createHmac, timingSafeEqual } = require('crypto');
+const {
+    getGlobalUser,
+    getGlobalUserEvents,
+    getGlobalUsers,
+    setGlobalUserBlocked
+} = require('../utils/globalUserRegistry');
 
 const SESSION_COOKIE = 'og_activity_session';
 const SESSION_DURATION_MS = 30 * 60 * 1000;
@@ -178,6 +184,7 @@ function adminPage() {
     <main class="container">
         <h1>OG CORE</h1>
         <h2>Admin Panel</h2>
+        <a href="/admin/users" class="btn">Global Users</a>
         <a href="/admin/activity" target="_blank" class="btn">Activity Dashboard</a>
         <a href="/admin/upgrade" class="btn">Upgrade Account</a>
         <a href="/" class="btn">Back to Home</a>
@@ -914,7 +921,39 @@ function upgradePage(message = '', phoneNumber = '') {
     </head><body><main><h1>Upgrade a paired account</h1>${message ? `<p class="message">${message}</p>` : ''}<form method="post" action="/admin/upgrade"><label for="phoneNumber">Paired WhatsApp number</label><input id="phoneNumber" name="phoneNumber" type="tel" inputmode="numeric" pattern="[0-9]{7,15}" placeholder="2348123456789" value="${phoneNumber}" required><button type="submit" name="action" value="premium">Mark as Premium</button><button class="secondary" type="submit" name="action" value="free">Unmark from Premium</button></form><p><a href="/admin">Back to admin</a></p></main></body></html>`;
 }
 
-function registerActivityDashboard(app, { redis, password, getConnectionStatus, getOwnerNumber, getBotNumbers, getSessionCollection, notifySessionOwner }) {
+function usersPage() {
+    return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Global Users | OG CORE</title>
+    <style>
+        :root{color-scheme:dark;--bg:#101716;--panel:#19211f;--line:#34413d;--text:#edf3ef;--muted:#9aaba4;--green:#8fe0b5;--red:#ff8d82}
+        *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 12% 0%,#263b32 0,transparent 34%),var(--bg);color:var(--text);font:15px "Segoe UI",sans-serif;min-height:100vh}
+        main{max-width:1120px;margin:auto;padding:36px 24px 56px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:30px}.top a{color:var(--green);text-decoration:none}.eyebrow{color:var(--green);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}h1{font-size:30px;margin:8px 0 4px}p{color:var(--muted);margin:0}.toolbar{display:flex;gap:12px;align-items:center;margin:24px 0 12px}.toolbar input{flex:1;min-width:0;background:#121a17;border:1px solid var(--line);border-radius:5px;padding:12px 14px;color:var(--text);font:inherit}.count{color:var(--muted);font-variant-numeric:tabular-nums}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:6px;background:rgba(25,33,31,.84)}table{width:100%;border-collapse:collapse;min-width:700px;text-align:left}th,td{padding:14px 16px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px;font-weight:600}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:#212d28}td a{display:block;color:var(--text);text-decoration:none;font-weight:600}td small{color:var(--muted);display:block;margin-top:4px}.status{color:var(--green)}.status.blocked{color:var(--red)}.empty{padding:42px;text-align:center;color:var(--muted)}
+        @media(max-width:600px){main{padding:26px 16px}.top{align-items:flex-start}.toolbar{align-items:stretch;flex-direction:column}.count{align-self:flex-end}}
+    </style></head><body><main><header class="top"><div><div class="eyebrow">OG CORE / administration</div><h1>Global users</h1><p>People seen across every connected bot account.</p></div><a href="/admin">Admin panel</a></header>
+    <section class="toolbar"><input id="search" type="search" placeholder="Search by name or number" aria-label="Search users"><span class="count" id="count">Loading users...</span></section>
+    <div class="table-wrap"><table><thead><tr><th>User</th><th>Last seen</th><th>Interactions</th><th>Bot accounts</th><th>Access</th></tr></thead><tbody id="users"><tr><td colspan="5" class="empty">Loading user registry...</td></tr></tbody></table></div></main>
+    <script>
+        const body=document.getElementById('users'),search=document.getElementById('search');let users=[];
+        function cell(row,value){const td=document.createElement('td');td.textContent=value;row.appendChild(td);return td}
+        function render(){const query=search.value.trim().toLowerCase(),visible=users.filter(user=>(user.name+' '+user.phoneNumber).toLowerCase().includes(query));body.replaceChildren();document.getElementById('count').textContent=visible.length+' of '+users.length+' users';if(!visible.length){const row=document.createElement('tr'),td=cell(row,users.length?'No users match your search.':'No users have been recorded yet.');td.colSpan=5;td.className='empty';body.appendChild(row);return}for(const user of visible){const row=document.createElement('tr'),identity=cell(row,'');const link=document.createElement('a');link.href='/admin/users/'+encodeURIComponent(user.phoneNumber);link.textContent=user.name||'Unknown';identity.appendChild(link);const number=document.createElement('small');number.textContent=user.phoneNumber;identity.appendChild(number);cell(row,new Date(user.lastSeen).toLocaleString());cell(row,Number(user.interactions||0).toLocaleString());cell(row,String((user.accounts||[]).length));const status=cell(row,user.blocked?'Blocked':'Active');status.className='status'+(user.blocked?' blocked':'');body.appendChild(row)}}
+        async function refresh(){try{const response=await fetch('/admin/users/data',{cache:'no-store'});if(response.status===401){location.reload();return}if(!response.ok)throw new Error();users=await response.json();render()}catch{document.getElementById('count').textContent='Registry unavailable'}}search.addEventListener('input',render);refresh();setInterval(refresh,5000);
+    </script></body></html>`;
+}
+
+function userDetailPage(phoneNumber) {
+    return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>User profile | OG CORE</title>
+    <style>
+        :root{color-scheme:dark;--bg:#101716;--panel:#19211f;--line:#34413d;--text:#edf3ef;--muted:#9aaba4;--green:#8fe0b5;--red:#ff8d82}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 12% 0%,#263b32 0,transparent 34%),var(--bg);color:var(--text);font:15px "Segoe UI",sans-serif;min-height:100vh}main{max-width:960px;margin:auto;padding:36px 24px 56px}.top{display:flex;justify-content:space-between;gap:16px;margin-bottom:30px}.top a{color:var(--green);text-decoration:none}.eyebrow{color:var(--green);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}h1{font-size:30px;margin:8px 0 5px;overflow-wrap:anywhere}.muted{color:var(--muted)}.profile{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:24px 0}.stat{background:var(--panel);padding:18px}.stat span{display:block;color:var(--muted);font-size:12px;text-transform:uppercase;margin-bottom:8px}.stat strong{overflow-wrap:anywhere}.actions{display:flex;gap:10px;margin:20px 0 32px}button{border:1px solid var(--line);border-radius:4px;padding:10px 14px;background:#26352e;color:var(--text);font:inherit;font-weight:600;cursor:pointer}button.danger{background:#3b2524;border-color:#70403c;color:#ffb0a8}h2{font-size:17px;margin:0 0 12px}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:6px}table{width:100%;border-collapse:collapse;min-width:600px;text-align:left}th,td{padding:13px 15px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:12px;text-transform:uppercase}tbody tr:last-child td{border-bottom:0}.empty{padding:32px;text-align:center;color:var(--muted)}.error{color:var(--red)}@media(max-width:600px){main{padding:26px 16px}.profile{grid-template-columns:1fr}.top{align-items:flex-start}}
+    </style></head><body><main><header class="top"><div><div class="eyebrow">OG CORE / global users</div><h1 id="name">Loading profile...</h1><div class="muted">${phoneNumber}</div></div><a href="/admin/users">All users</a></header><div id="notice" class="muted"></div>
+    <section class="profile"><div class="stat"><span>Access</span><strong id="access">Loading</strong></div><div class="stat"><span>Interactions</span><strong id="interactions">-</strong></div><div class="stat"><span>First seen</span><strong id="firstSeen">-</strong></div><div class="stat"><span>Last seen</span><strong id="lastSeen">-</strong></div><div class="stat"><span>Last activity</span><strong id="lastAction">-</strong></div><div class="stat"><span>Bot accounts</span><strong id="accounts">-</strong></div></section>
+    <div class="actions"><form id="blockForm" method="post"><button id="blockButton" class="danger" type="submit">Block user globally</button></form></div><section><h2>Recent activity</h2><div class="table-wrap"><table><thead><tr><th>Time</th><th>Action</th><th>Chat</th><th>Bot account</th></tr></thead><tbody id="events"><tr><td colspan="4" class="empty">Loading activity...</td></tr></tbody></table></div></section></main>
+    <script>
+        const number='${phoneNumber}',eventBody=document.getElementById('events'),form=document.getElementById('blockForm');
+        function addCell(row,value){const td=document.createElement('td');td.textContent=value||'-';row.appendChild(td)}
+        async function load(){try{const response=await fetch('/admin/users/'+number+'/data',{cache:'no-store'});if(response.status===401){location.href='/admin/login';return}if(response.status===404){document.getElementById('name').textContent='User not found';return}if(!response.ok)throw new Error();const data=await response.json(),user=data.user;document.getElementById('name').textContent=user.name||'Unknown';document.getElementById('access').textContent=user.blocked?'Blocked':'Active';document.getElementById('access').className=user.blocked?'error':'';document.getElementById('interactions').textContent=Number(user.interactions||0).toLocaleString();document.getElementById('firstSeen').textContent=new Date(user.firstSeen).toLocaleString();document.getElementById('lastSeen').textContent=new Date(user.lastSeen).toLocaleString();document.getElementById('lastAction').textContent=user.lastAction||'message';document.getElementById('accounts').textContent=(user.accounts||[]).map(account=>account.botNumber||account.tenantId).join(', ')||'Unknown';document.getElementById('blockButton').textContent=user.blocked?'Restore access':'Block user globally';document.getElementById('blockButton').className=user.blocked?'':'danger';form.action='/admin/users/'+number+'/'+(user.blocked?'unblock':'block');eventBody.replaceChildren();if(!data.events.length){const row=document.createElement('tr');const td=document.createElement('td');td.colSpan=4;td.className='empty';td.textContent='No activity recorded.';row.appendChild(td);eventBody.appendChild(row);return}for(const event of data.events){const row=document.createElement('tr');addCell(row,new Date(event.at).toLocaleString());addCell(row,event.action);addCell(row,event.chatType==='group'?'Group':'Private');addCell(row,event.botNumber||event.tenantId||'Unknown');eventBody.appendChild(row)}}catch{document.getElementById('notice').textContent='Could not load the user profile.'}}load();
+    </script></body></html>`;
+}
+
+function registerActivityDashboard(app, { redis, globalRedis = redis, password, getConnectionStatus, getOwnerNumber, getBotNumbers, getSessionCollection, notifySessionOwner }) {
     const isEnabled = password.length >= 32;
     const isAuthenticated = (req) => isEnabled && hasValidSession(req, password);
 
@@ -937,6 +976,62 @@ function registerActivityDashboard(app, { redis, password, getConnectionStatus, 
         if (!isEnabled) return res.status(503).send('Activity dashboard is disabled. Configure ACTIVITY_DASHBOARD_PASSWORD in this deployment.');
         if (!isAuthenticated(req)) return res.redirect(303, '/admin/login');
         res.send(dashboardPage());
+    });
+
+    app.get('/admin/users', (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isEnabled) return res.status(503).send('Admin panel is disabled. Configure ACTIVITY_DASHBOARD_PASSWORD in this deployment.');
+        if (!isAuthenticated(req)) return res.redirect(303, '/admin/login');
+        res.type('html').send(usersPage());
+    });
+
+    app.get('/admin/users/data', async (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isAuthenticated(req)) return res.status(401).json({ error: 'Unauthorized' });
+        try {
+            res.json(await getGlobalUsers(globalRedis));
+        } catch (error) {
+            console.error('Could not load global users:', error.message);
+            res.status(503).json({ error: 'Global user registry unavailable' });
+        }
+    });
+
+    app.get('/admin/users/:phone/data', async (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isAuthenticated(req)) return res.status(401).json({ error: 'Unauthorized' });
+        try {
+            const user = await getGlobalUser(globalRedis, req.params.phone);
+            if (!user) return res.status(404).json({ error: 'User not found' });
+            res.json({ user, events: await getGlobalUserEvents(globalRedis, req.params.phone) });
+        } catch (error) {
+            console.error('Could not load global user profile:', error.message);
+            res.status(503).json({ error: 'Global user registry unavailable' });
+        }
+    });
+
+    const updateUserAccess = (blocked) => async (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isAuthenticated(req)) return res.redirect(303, '/admin/login');
+        try {
+            const user = await getGlobalUser(globalRedis, req.params.phone);
+            if (!user) return res.status(404).send('User not found.');
+            await setGlobalUserBlocked(globalRedis, req.params.phone, blocked);
+            res.redirect(303, `/admin/users/${req.params.phone}`);
+        } catch (error) {
+            console.error('Could not update global user access:', error.message);
+            res.status(503).send('Could not update user access. Check Redis connectivity and try again.');
+        }
+    };
+
+    app.post('/admin/users/:phone/block', updateUserAccess(true));
+    app.post('/admin/users/:phone/unblock', updateUserAccess(false));
+
+    app.get('/admin/users/:phone', (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        if (!isEnabled) return res.status(503).send('Admin panel is disabled. Configure ACTIVITY_DASHBOARD_PASSWORD in this deployment.');
+        if (!isAuthenticated(req)) return res.redirect(303, '/admin/login');
+        if (!/^\d{7,15}$/.test(req.params.phone)) return res.status(400).send('Invalid user number.');
+        res.type('html').send(userDetailPage(req.params.phone));
     });
 
     app.get('/admin/upgrade', (req, res) => {
