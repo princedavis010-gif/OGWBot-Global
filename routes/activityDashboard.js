@@ -887,14 +887,34 @@ function dashboardPage() {
 }
 
 function upgradePage(message = '', phoneNumber = '') {
-    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Upgrade account</title><style>
-        body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;box-sizing:border-box;background:#102b2a;color:#f5f5ed;font:16px system-ui,sans-serif}
-        main{width:min(100%,420px);padding:28px 24px;box-sizing:border-box;border:1px solid #69877c;border-radius:8px;background:#092321}
-        h1{margin:0 0 18px;color:#e9c46a;font:700 27px Georgia,serif}label{display:block;margin:14px 0 6px;color:#c2d4c7}input{box-sizing:border-box;width:100%;padding:12px;border:1px solid #69877c;border-radius:5px;background:#102b2a;color:#fff;font-size:16px}button{width:100%;margin-top:12px;padding:12px;border:0;border-radius:5px;background:#e9c46a;color:#172521;font-weight:700;font-size:15px;cursor:pointer}.secondary{background:transparent;color:#e9c46a;border:1px solid #69877c}.message{line-height:1.5;color:#c2d4c7}
-    </style></head><body><main><h1>Upgrade a paired account</h1>${message ? `<p class="message">${message}</p>` : ''}<form method="post" action="/admin/upgrade"><label for="phoneNumber">Paired WhatsApp number</label><input id="phoneNumber" name="phoneNumber" type="tel" inputmode="numeric" pattern="[0-9]{7,15}" placeholder="2348123456789" value="${phoneNumber}" required><button type="submit" name="action" value="premium">Mark as Premium</button><button class="secondary" type="submit" name="action" value="free">Unmark from Premium</button></form><p><a href="/admin">Back to admin</a></p></main></body></html>`;
+    return `<!DOCTYPE html><html lang="en"><head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="robots" content="noindex,nofollow">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Kavoon&family=Rubik+Wet+Paint&display=swap" rel="stylesheet">
+        <title>OG CORE - Upgrade Account</title>
+        <style>
+            *{box-sizing:border-box}
+            body{min-height:100vh;margin:0;padding:50px 20px;display:grid;place-items:center;font-family:Arial,sans-serif;text-align:center;color:yellowgreen;background:linear-gradient(150deg,#0f172a,#1e1b4b 76%,#312e81);background-attachment:fixed}
+            main{width:min(100%,400px);margin:0 auto;padding:30px;background:rgba(30,27,75,.4);border:1px solid rgba(255,255,255,.12);border-radius:10px}
+            h1{margin:0 0 20px;color:rgb(221,187,15);text-shadow:1px 1px #000;font-family:"Rubik Wet Paint",system-ui,sans-serif;font-size:30px;font-weight:400}
+            p{margin:15px 0;color:rgb(19,221,150);font-family:Kavoon,system-ui,sans-serif;font-size:14px;line-height:1.5}
+            label{display:block;margin:12px 0 6px;color:rgb(19,221,150);font-family:Kavoon,system-ui,sans-serif;text-align:left}
+            input{width:100%;padding:12px;margin:8px 0 14px;border:1px solid #475569;border-radius:7px;background:#1e293b;color:#fff;font-size:16px;text-align:center;outline:none}
+            input:focus{border-color:rgb(221,187,15)}
+            button{display:block;width:100%;margin:12px 0;padding:12px;border:0;border-radius:7px;background:#25d366;color:#fff;font-family:Kavoon,system-ui,sans-serif;font-size:15px;font-weight:700;cursor:pointer}
+            button:hover{filter:brightness(1.1)}button:focus-visible,a:focus-visible{outline:3px solid rgb(221,187,15);outline-offset:3px}
+            .secondary{background:#24292e;border:1px solid rgba(255,255,255,.12)}
+            .message{padding:10px;border:1px solid rgba(19,221,150,.35);border-radius:6px}
+            a{color:rgb(19,221,150);font-family:Kavoon,system-ui,sans-serif}
+            @media(max-width:480px){body{padding:32px 16px}main{padding:24px 20px}h1{font-size:27px}}
+        </style>
+    </head><body><main><h1>Upgrade a paired account</h1>${message ? `<p class="message">${message}</p>` : ''}<form method="post" action="/admin/upgrade"><label for="phoneNumber">Paired WhatsApp number</label><input id="phoneNumber" name="phoneNumber" type="tel" inputmode="numeric" pattern="[0-9]{7,15}" placeholder="2348123456789" value="${phoneNumber}" required><button type="submit" name="action" value="premium">Mark as Premium</button><button class="secondary" type="submit" name="action" value="free">Unmark from Premium</button></form><p><a href="/admin">Back to admin</a></p></main></body></html>`;
 }
 
-function registerActivityDashboard(app, { redis, password, getConnectionStatus, getOwnerNumber, getBotNumbers, getSessionCollection }) {
+function registerActivityDashboard(app, { redis, password, getConnectionStatus, getOwnerNumber, getBotNumbers, getSessionCollection, notifySessionOwner }) {
     const isEnabled = password.length >= 32;
     const isAuthenticated = (req) => isEnabled && hasValidSession(req, password);
 
@@ -952,8 +972,20 @@ function registerActivityDashboard(app, { redis, password, getConnectionStatus, 
                 { tenantId: session.tenantId, paired: true },
                 update
             );
+
+            let notificationStatus = '';
+            if (action === 'premium' && notifySessionOwner) {
+                try {
+                    await notifySessionOwner(session.tenantId);
+                    notificationStatus = ' The owner was notified on WhatsApp.';
+                } catch (error) {
+                    console.error('Premium upgrade saved, but owner WhatsApp notification failed:', error.message);
+                    notificationStatus = ' The upgrade was saved, but the owner could not be notified because WhatsApp is unavailable.';
+                }
+            }
+
             const status = action === 'premium' ? 'marked as premium' : 'unmarked from premium';
-            res.type('html').send(upgradePage(`WhatsApp number ending in ${phoneNumber.slice(-4)} is now ${status}.`, phoneNumber));
+            res.type('html').send(upgradePage(`WhatsApp number ending in ${phoneNumber.slice(-4)} is now ${status}.${notificationStatus}`, phoneNumber));
         } catch (error) {
             console.error('Could not upgrade WhatsApp session:', error);
             res.status(503).send('Could not update the account. Check MongoDB connectivity and try again.');

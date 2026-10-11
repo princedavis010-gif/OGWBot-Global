@@ -465,6 +465,10 @@ registerActivityDashboard(app, {
     redis,
     password: ACTIVITY_DASHBOARD_PASSWORD,
     getConnectionStatus: () => global.whatsappConnection,
+    notifySessionOwner: async (tenantId) => {
+        const manager = await getBotSessionManager();
+        return manager.notifyPremiumUpgrade(tenantId);
+    },
     getSessionCollection: async () => {
         await initializeMongo();
         return mongoSessionCollection;
@@ -620,6 +624,31 @@ async function connectToWhatsApp() {
         logger: pino({ level: 'silent' }),
         auth: state
     });
+    let premiumStatusCache = { expiresAt: 0, enabled: false };
+    sock.isPremium = async () => {
+        if (!isTenantWorker) return false;
+        if (Date.now() < premiumStatusCache.expiresAt) return premiumStatusCache.enabled;
+
+        try {
+            const session = await mongoSessionCollection.findOne(
+                { tenantId: BOT_TENANT_ID, paired: true },
+                { projection: { plan: 1 } }
+            );
+            premiumStatusCache = {
+                expiresAt: Date.now() + 15000,
+                enabled: session?.plan === 'premium'
+            };
+
+        } catch (error) {
+            console.error('Could not check premium status:', error.message);
+            premiumStatusCache = { expiresAt: Date.now() + 5000, enabled: false };
+        }
+
+        return premiumStatusCache.enabled;
+    };
+    sock.invalidatePremiumCache = () => {
+        premiumStatusCache.expiresAt = 0;
+    };
     trackOutgoingMessages(sock);
     global.activeSock = sock;
     let connectionIsOpen = false;
@@ -1940,6 +1969,32 @@ async function connectToWhatsApp() {
 
 if (isTenantWorker) {
     process.on('message', async (message) => {
+        if (message?.type === 'notify-premium-upgrade' && message.requestId) {
+            try {
+                if (!global.activeSock || global.whatsappConnection.status !== 'connected') {
+                    throw new Error('WhatsApp is not connected.');
+                }
+                global.activeSock.invalidatePremiumCache?.();
+
+                const ownerNumber = normalizePhoneNumber(OWNER_NUMBER || botPhoneNumber);
+                const accountNumber = normalizePhoneNumber(botPhoneNumber);
+                if (!/^\d{7,15}$/.test(ownerNumber) || !/^\d{7,15}$/.test(accountNumber)) {
+                    throw new Error('The owner or paired WhatsApp number is unavailable.');
+                }
+
+                const ownerChatJid = `${ownerNumber}@s.whatsapp.net`;
+                const accountJid = `${accountNumber}@s.whatsapp.net`;
+                await global.activeSock.sendMessage(ownerChatJid, {
+                    text: `╚»☬🌟◻️♥ PREMIUM UPGRADE ♥◻️🌟☬«╝\n\n🎉 This WhatsApp account has been upgraded to *Premium* and unlocked new features! ✨\n\n👤 @${accountNumber}\n\n🔓 More premium features are on the way.\n\n> 𝓞𝓖 𝓒𝓞𝓡𝓔`,
+                    mentions: [accountJid]
+                });
+                process.send?.({ type: 'premium-notification-result', requestId: message.requestId });
+            } catch (error) {
+                process.send?.({ type: 'premium-notification-result', requestId: message.requestId, error: error.message });
+            }
+            return;
+        }
+
         if (message?.type !== 'request-pairing-code' || !message.requestId) return;
         try {
             if (!global.activeSock) throw new Error('WhatsApp is still initializing. Refresh and try again shortly.');

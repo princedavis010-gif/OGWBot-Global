@@ -104,13 +104,13 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
                 return;
             }
 
-            if (message?.type === 'pairing-result') {
+            if (message?.type === 'pairing-result' || message?.type === 'premium-notification-result') {
                 const pending = pendingPairingRequests.get(message.requestId);
                 if (!pending) return;
                 clearTimeout(pending.timeout);
                 pendingPairingRequests.delete(message.requestId);
                 if (message.error) pending.reject(new Error(message.error));
-                else pending.resolve(message.code);
+                else pending.resolve(message.code ?? true);
             }
         });
 
@@ -203,7 +203,29 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
         });
     }
 
-    return { getOrCreateSession, getStatus, requestPairingCode, restoreSessions };
+    function notifyPremiumUpgrade(tenantId) {
+        const worker = workers.get(tenantId);
+        if (!worker?.child?.connected || worker.status !== 'connected') {
+            throw new Error('The paired WhatsApp worker is not connected.');
+        }
+
+        const requestId = randomUUID();
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                pendingPairingRequests.delete(requestId);
+                reject(new Error('Premium notification timed out.'));
+            }, 15000);
+            pendingPairingRequests.set(requestId, { tenantId, resolve, reject, timeout });
+            worker.child.send({ type: 'notify-premium-upgrade', requestId }, (error) => {
+                if (!error) return;
+                clearTimeout(timeout);
+                pendingPairingRequests.delete(requestId);
+                reject(error);
+            });
+        });
+    }
+
+    return { getOrCreateSession, getStatus, notifyPremiumUpgrade, requestPairingCode, restoreSessions };
 }
 
 module.exports = { createBotSessionManager };
