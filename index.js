@@ -94,6 +94,7 @@ let showTerminalLogs = false; // Enabled by default so you can see incoming mess
 let botJid = '';
 let botLid = '';
 let botPhoneNumber = '';
+let botProfileName = '';
 const ENV_OWNER_NUMBER = isTenantWorker ? '' : String(process.env.OWNER_NUMBER || '').replace(/\D/g, '');
 let OWNER_NUMBER = ENV_OWNER_NUMBER;
 const PAIRING_SETUP_TOKEN = process.env.PAIRING_SETUP_TOKEN || '';
@@ -627,7 +628,8 @@ function publishWorkerStatus() {
         status: global.whatsappConnection.status,
         method: global.whatsappConnection.method,
         qr: global.latestQR,
-        phoneNumber: botPhoneNumber
+        phoneNumber: botPhoneNumber,
+        profileName: botProfileName
     });
 }
 
@@ -806,6 +808,7 @@ async function connectToWhatsApp() {
             connectionIsOpen = true;
             botJid = sock.user?.id || '';
             botLid = sock.user?.lid || '';
+            botProfileName = String(sock.user?.name || sock.user?.verifiedName || '').trim();
             let botPhoneJid = botJid;
             if (!botPhoneJid.endsWith('@s.whatsapp.net') && !botPhoneJid.endsWith('@hosted')) {
                 try {
