@@ -20,10 +20,10 @@ function readCookie(req) {
 function createBotSessionManager({ sessionCollection, authCollection, workerPath, env = process.env, isBotAccountSuspended = async () => false, setBotAccountSuspended = async () => {} }) {
     const workers = new Map();
     const pendingPairingRequests = new Map();
-    const configuredMaxWorkers = Number.parseInt(env.BOT_MAX_WORKERS || '1', 10);
+    const configuredMaxWorkers = Number.parseInt(env.BOT_MAX_WORKERS || '3', 10);
     const maxWorkers = Number.isInteger(configuredMaxWorkers) && configuredMaxWorkers > 0
         ? configuredMaxWorkers
-        : 1;
+        : 3;
 
     function activeWorkerCount() {
         return [...workers.values()].filter((worker) =>

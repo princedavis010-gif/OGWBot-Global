@@ -2077,6 +2077,9 @@ app.use(async (req, res, next) => {
             return res.status(403).send('This connected WhatsApp account has been suspended. Contact the site administrator.');
         }
         console.error('Could not initialize the WhatsApp web session:', error);
+        if (error.message?.includes('current capacity')) {
+            return res.status(503).send(`${error.message} Increase BOT_MAX_WORKERS if this server has enough memory.`);
+        }
         res.status(503).send('WhatsApp sessions are temporarily unavailable. Check the MongoDB configuration.');
     }
 });
