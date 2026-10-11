@@ -20,7 +20,6 @@ function readCookie(req) {
 function createBotSessionManager({ sessionCollection, authCollection, workerPath, env = process.env, isBotAccountSuspended = async () => false, setBotAccountSuspended = async () => {} }) {
     const workers = new Map();
     const pendingPairingRequests = new Map();
-    const loggedSessionIds = new Set();
     const configuredMaxWorkers = Number.parseInt(env.BOT_MAX_WORKERS || '1', 10);
     const maxWorkers = Number.isInteger(configuredMaxWorkers) && configuredMaxWorkers > 0
         ? configuredMaxWorkers
@@ -95,13 +94,7 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
                 worker.method = message.method ?? worker.method;
                 if (Object.prototype.hasOwnProperty.call(message, 'qr')) worker.qr = message.qr;
                 worker.phoneNumber = message.phoneNumber ?? worker.phoneNumber;
-                worker.profileName = message.profileName ?? worker.profileName;
                 if (worker.status === 'connected') {
-                    if (!worker.connectedLogWritten) {
-                        const accountName = worker.profileName || worker.phoneNumber || 'WhatsApp account';
-                        console.log(`[Connected account] Session ID: ${tenantId} | Username: ${accountName} | WhatsApp: ${worker.phoneNumber || 'unknown'}`);
-                        worker.connectedLogWritten = true;
-                    }
                     worker.paired = true;
                     clearTimeout(worker.unpairedTimeout);
                     void sessionCollection.updateOne(
@@ -182,19 +175,12 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
                 expiresAt: new Date(Date.now() + UNPAIRED_SESSION_LIFETIME_MS)
             };
             await sessionCollection.insertOne(session);
-            console.log(`[Website session] Session ID: ${session.tenantId} | Username: pending WhatsApp pairing`);
-            loggedSessionIds.add(session.tenantId);
             const secureCookie = env.NODE_ENV === 'production' || req.secure || req.get('x-forwarded-proto') === 'https';
             res.append('Set-Cookie', `${COOKIE_NAME}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_LIFETIME_MS / 1000}${secureCookie ? '; Secure' : ''}`);
         } else {
             const lifetime = session.paired ? SESSION_LIFETIME_MS : UNPAIRED_SESSION_LIFETIME_MS;
             session.expiresAt = new Date(Date.now() + lifetime);
             await sessionCollection.updateOne({ tokenHash: hashToken(token) }, { $set: { expiresAt: session.expiresAt } });
-        }
-
-        if (!loggedSessionIds.has(session.tenantId)) {
-            console.log(`[Website session] Session ID: ${session.tenantId} | Username: ${session.phoneNumber || 'pending WhatsApp pairing'}`);
-            loggedSessionIds.add(session.tenantId);
         }
 
         const worker = startWorker(session.tenantId);
