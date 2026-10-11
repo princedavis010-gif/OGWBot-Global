@@ -61,7 +61,7 @@ function getChatSession(conversationId = 'default', options = {}) {
 
     const aiClient = getAiClient();
     const chatSession = aiClient.chats.create({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.5-flash-lite',
         config: {
             systemInstruction: `
 Your name is OG Core but you preferred to be called Itachi.
