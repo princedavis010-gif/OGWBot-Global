@@ -134,29 +134,25 @@ function getMessageText(content) {
 }
 
 async function withAiTyping(sock, sender, operation) {
-    const startedAt = Date.now();
-    try {
-        await sock.sendPresenceUpdate('composing', sender);
-    } catch (error) {
-        console.error('Could not show AI typing presence:', error);
-    }
+    const updatePresence = (presence) => {
+        try {
+            Promise.resolve(sock.sendPresenceUpdate(presence, sender)).catch((error) => {
+                console.error(`Could not update AI typing presence (${presence}):`, error);
+            });
+        } catch (error) {
+            console.error(`Could not update AI typing presence (${presence}):`, error);
+        }
+    };
 
-    const refreshTimer = setInterval(() => {
-        Promise.resolve(sock.sendPresenceUpdate('composing', sender)).catch((error) => {
-            console.error('Could not refresh AI typing presence:', error);
-        });
-    }, 10000);
+    updatePresence('composing');
+
+    const refreshTimer = setInterval(() => updatePresence('composing'), 10000);
 
     try {
         return await operation();
     } finally {
         clearInterval(refreshTimer);
-        await sleep(Math.max(0, 1500 - (Date.now() - startedAt)));
-        try {
-            await sock.sendPresenceUpdate('paused', sender);
-        } catch (error) {
-            console.error('Could not pause AI typing presence:', error);
-        }
+        updatePresence('paused');
     }
 }
 

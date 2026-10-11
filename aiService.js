@@ -1,6 +1,4 @@
 const { GoogleGenAI } = require('@google/genai');
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
 const CLOUDFLARE_ACCOUNT_ID = '4bec799b099d3aeb59cdebef42b27b15';
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; // Replace
@@ -63,7 +61,7 @@ function getChatSession(conversationId = 'default', options = {}) {
 
     const aiClient = getAiClient();
     const chatSession = aiClient.chats.create({
-        model: 'gemini-3.5-flash-lite',
+        model: 'gemini-2.5-flash',
         config: {
             systemInstruction: `
 Your name is OG Core but you preferred to be called Itachi.
@@ -153,14 +151,12 @@ async function getAiResponse(prompt, attachmentParts = [], executeCommand, conve
             }
 
             const followUp = await chat.sendMessage({ message: functionResponses });
-            await sleep(500);
             return {
                 commandExecuted,
                 text: followUp.text?.trim() || 'I could not run that command. Please rephrase the request.'
             };
         }
         
-        await sleep(500);
         const answer = response.text;
         if (!answer || !answer.trim()) {
             throw new Error('Gemini returned an empty response.');
