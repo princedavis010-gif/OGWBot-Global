@@ -1070,7 +1070,7 @@ function registerActivityDashboard(app, { redis, globalRedis = redis, password, 
         try {
             const [sessionCollection, manager] = await Promise.all([getSessionCollection(), getSessionManager()]);
             const sessions = await sessionCollection.find({
-                $or: [{ paired: true }, { phoneNumber: { $exists: true } }, { suspended: true }]
+                expiresAt: { $gt: new Date() }
             }).sort({ lastActivityAt: -1, pairedAt: -1, createdAt: -1 }).limit(500).toArray();
             res.json(sessions.map((session) => ({
                 tenantId: session.tenantId,
