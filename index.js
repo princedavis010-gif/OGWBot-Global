@@ -41,7 +41,7 @@ const { isGroupAllowed, canUseCommand, formatCooldownMessage } = require('./util
 const handleMenu = require('./commands/menu');
 const handleStatus = require('./commands/status');
 const botStartTime = Math.floor(Date.now() / 1000);
-let isPrivate = false;
+let isPrivate = true;
 const handleTaker = require('./commands/taker');
 const handleVV = require('./commands/vv');
 const handleSticker = require('./commands/sticker');
@@ -383,7 +383,7 @@ async function getConsciousAiResponse(jid, userMessage) {
             model: 'gemini-2.5-flash',
             contents: history,
             config: {
-                systemInstruction: `You are OG, a street-smart, witty, and friendly AI WhatsApp companion created by Prince Davis. You speak with a cool blend of English and Nigerian Pidgin slang. You are fully conscious of what is happening in this chat, including any commands, trivia games, polls, or tools that were just used. Pick up the conversation naturally based on the latest context.`
+                systemInstruction: `You are OG, a street-smart, witty, and friendly AI WhatsApp companion. You speak with a cool blend of English and Nigerian Pidgin slang. You are fully conscious of what is happening in this chat, including any commands, trivia games, polls, or tools that were just used. Pick up the conversation naturally based on the latest context.`
             }
         });
         const aiReply = response.text;
@@ -1520,7 +1520,7 @@ async function connectToWhatsApp() {
                         }
                         isPrivate = true;
                         await sleep(1000);
-                        await sock.sendMessage(sender, { text: "Prince Davis, I'm all yours now. 😁" });
+                        await sock.sendMessage(sender, { text: "𝙾𝙶-𝙲𝙾𝚁𝙴 𝙸𝚂 𝙽𝙾𝚆 𝙸𝙽 𝙿𝚁𝙸𝚅𝙰𝚃𝙴 𝙼𝙾𝙳𝙴" });
                         return;
                     }
 
@@ -1828,8 +1828,8 @@ async function connectToWhatsApp() {
                     isQuotingBot = Boolean(repliedBotMessageKind);
                     if (repliedBotMessageKind === 'command') return;
 
-                    const isAiTriggered = isMentioned || (isQuoteAiEnabled() && isQuotingBot) || text.toLowerCase().startsWith('ogs');
-
+                   // const isAiTriggered = isMentioned || (isQuoteAiEnabled() && isQuotingBot) || text.toLowerCase().startsWith('ogs');
+                         const isAiTriggered = (isQuoteAiEnabled() && isQuotingBot) || text.toLowerCase().startsWith('ogs');
                     if (isAiTriggered) {
                         if (getCommandAccessMode() === 'admin' && !isOwnerSenderNumber(senderNumber)) {
                             let senderIsAdmin = false;
