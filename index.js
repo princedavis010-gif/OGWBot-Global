@@ -181,6 +181,10 @@ function connectionStatusMarkup() {
                         element.textContent = '✅ WhatsApp connected successfully' + (status.method ? ' via ' + status.method : '') + '.';
                         element.style.color = '#25D366';
                         element.style.fontFamily = 'kavoon';
+                    } else if (status.status === 'idle') {
+                        element.textContent = 'Open the QR or pairing page to start a WhatsApp session.';
+                        element.style.color = '#f0d56b';
+                        element.style.fontFamily = 'kavoon';
                     } else if (status.status === 'disconnected') {
                         element.textContent = 'WhatsApp disconnected. Reconnecting...';
                         element.style.color = '#ffb84d';
@@ -2067,7 +2071,7 @@ if (isTenantWorker) {
 
 app.use(async (req, res, next) => {
     if (isTenantWorker || req.path.startsWith('/admin') ||
-        !['/qr', '/qr-state', '/pair', '/connection-status'].includes(req.path)) return next();
+        !['/qr', '/pair'].includes(req.path)) return next();
     try {
         const manager = await getBotSessionManager();
         req.botSession = await manager.getOrCreateSession(req, res);
@@ -2195,13 +2199,13 @@ app.get('/', (req, res) => {
 
 app.get('/connection-status', async (req, res) => {
     const manager = await getBotSessionManager();
-    const { qr, ...status } = manager.getStatus(req.botSession.tenantId);
+    const { qr, ...status } = await manager.getStatusForRequest(req);
     res.set('Cache-Control', 'no-store').json(status);
 });
 
 app.get('/qr-state', async (req, res) => {
     const manager = await getBotSessionManager();
-    const status = manager.getStatus(req.botSession.tenantId);
+    const status = await manager.getStatusForRequest(req);
     const image = status.qr ? await qrcode.toDataURL(status.qr) : null;
     res.set('Cache-Control', 'no-store').json({ status: status.status, image });
 });

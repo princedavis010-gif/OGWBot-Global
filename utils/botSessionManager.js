@@ -20,7 +20,7 @@ function readCookie(req) {
 function createBotSessionManager({ sessionCollection, authCollection, workerPath, env = process.env, isBotAccountSuspended = async () => false, setBotAccountSuspended = async () => {} }) {
     const workers = new Map();
     const pendingPairingRequests = new Map();
-    const configuredMaxWorkers = Number.parseInt(env.BOT_MAX_WORKERS || '3', 10);
+    const configuredMaxWorkers = Number.parseInt(env.BOT_MAX_WORKERS || '4', 10);
     const maxWorkers = Number.isInteger(configuredMaxWorkers) && configuredMaxWorkers > 0
         ? configuredMaxWorkers
         : 3;
@@ -154,6 +154,7 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
     }
 
     async function getOrCreateSession(req, res) {
+        const refreshSession = !['/qr-state', '/connection-status'].includes(req.path);
         let token = readCookie(req);
         let session = token
             ? await sessionCollection.findOne({ tokenHash: hashToken(token), expiresAt: { $gt: new Date() } })
@@ -177,24 +178,24 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
             await sessionCollection.insertOne(session);
             const secureCookie = env.NODE_ENV === 'production' || req.secure || req.get('x-forwarded-proto') === 'https';
             res.append('Set-Cookie', `${COOKIE_NAME}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_LIFETIME_MS / 1000}${secureCookie ? '; Secure' : ''}`);
-        } else {
+        } else if (session.paired || refreshSession) {
             const lifetime = session.paired ? SESSION_LIFETIME_MS : UNPAIRED_SESSION_LIFETIME_MS;
             session.expiresAt = new Date(Date.now() + lifetime);
             await sessionCollection.updateOne({ tokenHash: hashToken(token) }, { $set: { expiresAt: session.expiresAt } });
         }
 
         const worker = startWorker(session.tenantId);
-        if (!session.paired) refreshUnpairedTimeout(session.tenantId, worker);
+        if (!session.paired && refreshSession) refreshUnpairedTimeout(session.tenantId, worker);
         return session;
     }
 
     async function restoreSessions() {
-        const abandonedSessions = sessionCollection.find({ paired: { $ne: true } })
+        const abandonedSessions = sessionCollection.find({ paired: { $ne: true }, suspended: { $ne: true } })
             .project({ tenantId: 1 })
         for await (const session of abandonedSessions) {
             await authCollection.deleteMany({ tenantId: session.tenantId });
         }
-        await sessionCollection.deleteMany({ paired: { $ne: true } });
+        await sessionCollection.deleteMany({ paired: { $ne: true }, suspended: { $ne: true } });
 
         const sessions = await sessionCollection.find({ paired: true, expiresAt: { $gt: new Date() } })
             .sort({ pairedAt: 1 })
@@ -211,7 +212,19 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
             : { status: 'disconnected', method: null, phoneNumber: null, qr: null };
     }
 
-    async function disconnectSession(tenantId) {
+    async function getStatusForRequest(req) {
+        const token = readCookie(req);
+        if (!token) return { status: 'idle', method: null, phoneNumber: null, qr: null };
+        const session = await sessionCollection.findOne({
+            tokenHash: hashToken(token),
+            expiresAt: { $gt: new Date() }
+        });
+        return session
+            ? getStatus(session.tenantId)
+            : { status: 'idle', method: null, phoneNumber: null, qr: null };
+    }
+
+    async function disconnectSession(tenantId, { removeSession = true } = {}) {
         const worker = workers.get(tenantId);
         if (worker) {
             clearTimeout(worker.unpairedTimeout);
@@ -232,13 +245,13 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
             if (workers.get(tenantId) === worker) workers.delete(tenantId);
         }
 
-        await Promise.all([
-            authCollection.deleteMany({ tenantId }),
-            sessionCollection.updateOne(
+        const sessionCleanup = removeSession
+            ? sessionCollection.deleteOne({ tenantId })
+            : sessionCollection.updateOne(
                 { tenantId },
                 { $set: { paired: false, disconnectedAt: new Date() } }
-            )
-        ]);
+            );
+        await Promise.all([authCollection.deleteMany({ tenantId }), sessionCleanup]);
     }
 
     async function setSessionSuspended(tenantId, suspended) {
@@ -248,7 +261,7 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
         if (suspended) {
             await setBotAccountSuspended(session.phoneNumber, true);
             await sessionCollection.updateOne({ tenantId }, { $set: { suspended: true } });
-            await disconnectSession(tenantId);
+            await disconnectSession(tenantId, { removeSession: false });
             return;
         }
 
@@ -315,6 +328,7 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
         disconnectSession,
         getOrCreateSession,
         getStatus,
+        getStatusForRequest,
         notifyPremiumUpgrade,
         requestPairingCode,
         restoreSessions,
