@@ -54,7 +54,6 @@ Please use your powers responsibly. 🌚\n
         }, { quoted: m });
     } catch (error) {
         console.error("Promote error:", error);
-        await sock.sendMessage(sender, { text: "Make me admin fess!" }, { quoted: m });
     }
 }
 

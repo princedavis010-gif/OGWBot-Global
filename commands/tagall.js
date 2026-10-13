@@ -48,8 +48,6 @@ async function handleTagAll(sock, m, text, sender, sleep) {
 
     } catch (error) {
         console.error("Error executing tagall:", error);
-        await sleep(1000);
-        await sock.sendMessage(sender, { text: "❌ Failed to tag group members." });
     }
 }
 

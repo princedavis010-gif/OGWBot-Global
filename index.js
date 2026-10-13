@@ -15,8 +15,15 @@ const PORT = process.env.PORT || 3000;
 global.latestQR = null;
 global.whatsappConnection = { status: 'connecting', method: null };
 require('dotenv').config();
+const { installErrorReporter } = require('./utils/errorReporter');
 const isTenantWorker = process.env.BOT_WORKER === '1';
 const BOT_TENANT_ID = process.env.BOT_TENANT_ID || '';
+const errorReporter = installErrorReporter({
+    getOwnerNumber: () => OWNER_NUMBER || botPhoneNumber,
+    getSocket: () => global.activeSock,
+    getTenantId: () => BOT_TENANT_ID,
+    isReady: () => global.whatsappConnection.status === 'connected'
+});
 const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URL || '';
 const PUBLIC_BASE_URL = String(process.env.RENDER_EXTERNAL_URL || 'https://og-core-2c5v.onrender.com').replace(/\/+$/, '');
 const {
@@ -76,6 +83,7 @@ const {
 const { matchesOwnerNumber } = require('./utils/ownerAccess');
 const registerActivityDashboard = require('./routes/activityDashboard');
 const handleAlive = require('./commands/alive');
+const handleProfile = require('./commands/profile');
 const handleImagine = require('./commands/imagine');
 const handleFlog = require('./commands/flog');
 const handleLoveTest = require('./commands/lovetest');
@@ -705,6 +713,7 @@ async function connectToWhatsApp() {
         global.whatsappConnection.status = 'connected';
         global.whatsappConnection.method ||= 'saved session';
         publishWorkerStatus();
+        void errorReporter.flush();
         const ownerNumber = normalizePhoneNumber(OWNER_NUMBER);
         if (!/^\d{7,15}$/.test(ownerNumber)) {
             console.error('Could not send bot-ready confirmation: owner number is missing or invalid.');
@@ -1704,6 +1713,20 @@ async function connectToWhatsApp() {
                         return;
                     }
 
+                    if (commandName === 'profile') {
+                        if (!isOwnerSenderNumber(senderNumber)) return;
+                        await handleProfile({
+                            sock,
+                            m,
+                            senderNumber,
+                            text,
+                            ownerNumber: OWNER_NUMBER,
+                            botPhoneNumber,
+                            getContextInfo
+                        });
+                        return;
+                    }
+
                     if (text.toLowerCase().startsWith('.add') || text.toLowerCase().startsWith('.addmember')) {
                         if (!await isAdminActionAllowed(sock, sender, senderNumber, senderJid, m)) {
                             await sock.sendMessage(sender, { text: '❌ 𝚁𝙴𝚂𝚃𝚁𝙸𝙲𝚃𝙴𝙳.\n\n— 𝙾𝙽𝙻𝚈 𝙶𝚁𝙾𝚄𝙿 𝙰𝙳𝙼𝙸𝙽𝚂 𝙲𝙰𝙽 𝚄𝚂𝙴 𝚃𝙷𝙸𝚂 𝙲𝙾𝙼𝙼𝙰𝙽𝙳' }, { quoted: m });
@@ -1883,7 +1906,9 @@ async function connectToWhatsApp() {
                             );
                         } catch (error) {
                             console.error('AI attachment processing failed:', error);
-                            await sock.sendMessage(sender, { text: `❌ I couldn't read that attachment: ${error.message}` }, { quoted: m });
+                            if (!sender.endsWith('@g.us')) {
+                                await sock.sendMessage(sender, { text: 'I could not read that attachment. Please try again later.' }, { quoted: m });
+                            }
                             return;
                         }
 
@@ -2004,7 +2029,9 @@ async function connectToWhatsApp() {
 
                         } catch (error) {
                             console.error("Gemini API Error:", error);
-                            await sock.sendMessage(sender, { text: "Calm, one at a time please. 🙂" });
+                            if (!sender.endsWith('@g.us')) {
+                                await sock.sendMessage(sender, { text: 'I could not complete that reply. Please try again later.' });
+                            }
                         }
                         return;
                     }

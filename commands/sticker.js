@@ -73,7 +73,9 @@ async function handleSticker(sock, m, text, sender, sleep) {
 
     } catch (error) {
         console.error('Sticker generation error:', error);
-        await sock.sendMessage(sender, { text: '❌ Failed to create sticker. Please try again!' }, { quoted: m });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, { text: 'Could not complete that action. Please try again later.' }, { quoted: m });
+        }
     }
 }
 

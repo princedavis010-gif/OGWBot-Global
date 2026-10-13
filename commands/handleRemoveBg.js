@@ -66,7 +66,9 @@ async function handleRemoveBg({ sock, m, sender, sleep, getContextInfo }) {
 
     } catch (err) {
         console.error("Remove BG error:", err);
-        await sock.sendMessage(sender, { text: "❌ Network issue. Try again later!" }, { quoted: m });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, { text: 'Could not complete that action. Please try again later.' }, { quoted: m });
+        }
     }
 }
 

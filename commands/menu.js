@@ -61,6 +61,7 @@ async function handleMenu({ sock, m, sender, sleep }) {
 ┃ 👑 OWNER & SYSTEM
 ┗━━━━━━━━━━━━━━━━━
 
+│ ➜ .profile (reply, mention, or number)
 │ ➜ .status
 │ ➜ .private
 │ ➜ .public

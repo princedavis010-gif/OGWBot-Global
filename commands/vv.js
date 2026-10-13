@@ -78,7 +78,9 @@ async function handleVV({ sock, m, sender, sleep, getContextInfo }) {
 
     } catch (error) {
         console.error("View Once extraction error:", error);
-        await sock.sendMessage(sender, { text: `❌ Failed: ${error.message}` }, { quoted: m });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, { text: 'Could not retrieve that media. Please try again later.' }, { quoted: m });
+        }
     }
 }
 

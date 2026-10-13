@@ -50,9 +50,11 @@ async function handleToImg({ sock, m, sender, sleep, getContextInfo }) {
         await sock.sendMessage(sender, { image: imageBuffer }, { quoted: m });
     } catch (error) {
         console.error('Static sticker conversion error:', error);
-        await sock.sendMessage(sender, {
-            text: '❌ Failed to convert static sticker. Please try again.'
-        }, { quoted: m });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, {
+                text: 'Could not complete that action. Please try again later.'
+            }, { quoted: m });
+        }
     } 
 } 
 

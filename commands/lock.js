@@ -13,7 +13,6 @@ async function handleLock(sock, m, text, sender, sleep) {
         await sock.sendMessage(sender, { text: "🔒 Group locked! Only admins can send messages now." }, { quoted: m });
     } catch (error) {
         console.error("Lock error:", error);
-        await sock.sendMessage(sender, { text: "❌ Make sure I'm an admin with the right permissions first!" }, { quoted: m });
     }
 }
 

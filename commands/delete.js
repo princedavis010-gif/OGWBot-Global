@@ -64,9 +64,14 @@ async function handleDelete({
         await sock.sendMessage(sender, { delete: quotedKey });
     } catch (error) {
         console.error('Failed to delete replied-to group message:', error);
-        await sock.sendMessage(sender, {
+      /*  await sock.sendMessage(sender, {
             text: '❌ Could not delete that message. Make sure the bot is a group admin and the message can still be revoked.'
-        }, { quoted: m });
+        }, { quoted: m }); */
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, {
+                text: 'Could not complete that action. Please try again later.'
+            }, { quoted: m });
+        }
     }
 }
 

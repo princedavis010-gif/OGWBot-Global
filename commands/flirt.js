@@ -44,8 +44,9 @@ async function handleFlirt({ sock, m, sender, senderNumber, senderJid, sleep, lo
         }
     } catch (e) {
         console.error('Error in flirt command:', e);
-        await sleep(1000);
-        await sock.sendMessage(sender, { text: '❌ Failed to get flirt message. Please try again later!' }, { quoted: m });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, { text: 'Could not complete that action. Please try again later.' }, { quoted: m });
+        }
     }
 }
 

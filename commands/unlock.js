@@ -13,7 +13,6 @@ async function handleUnlock(sock, m, text, sender, sleep) {
         await sock.sendMessage(sender, { text: "🔓 Group unlocked! Everyone can send messages now." }, { quoted: m });
     } catch (error) {
         console.error("Unlock error:", error);
-        await sock.sendMessage(sender, { text: "❌ Make sure I'm an admin with the right permissions first!" }, { quoted: m });
     }
 }
 

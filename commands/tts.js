@@ -36,7 +36,9 @@ async function handleTTS(sock, m, text, sender, sleep) {
 
     } catch (error) {
         console.error("TTS error:", error);
-        await sock.sendMessage(sender, { text: "❌ Failed to generate audio message." }, { quoted: m });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, { text: 'Could not complete that action. Please try again later.' }, { quoted: m });
+        }
     }
 }
 

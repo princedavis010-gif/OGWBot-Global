@@ -56,7 +56,6 @@ async function handleKick(sock, m, text, sender, sleep) {
 
     } catch (error) {
         console.error("Kick error:", error);
-        await sock.sendMessage(sender, { text: "❌ Make sure I am admin with the right permissions!" }, { quoted: m });
     }
 }
 

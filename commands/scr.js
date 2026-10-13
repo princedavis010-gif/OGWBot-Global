@@ -90,9 +90,11 @@ module.exports = {
 
         } catch (err) {
             console.error('Scr command error:', err);
-            await sock.sendMessage(from, {
-                text: `❌ Failed to process image: ${err.message}`
-            }, { quoted: m });
+            if (!from.endsWith('@g.us')) {
+                await sock.sendMessage(from, {
+                    text: 'Could not process that image. Please try again later.'
+                }, { quoted: m });
+            }
         }
     }
 };

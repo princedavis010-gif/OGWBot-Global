@@ -186,10 +186,9 @@ module.exports = async function handleSong({ sock, m, sender, text }) {
         console.error('Song plugin error:', err.message);
         if (sock.ws?.isOpen) {
             try {
-                const message = err.message.includes('audio provider')
-                    ? '❌ The song download service is temporarily unavailable. Please try again shortly.'
-                    : `❌ Failed: ${err.message}`;
-                await sock.sendMessage(chatId, { text: message });
+                if (!chatId.endsWith('@g.us')) {
+                    await sock.sendMessage(chatId, { text: 'The song could not be downloaded. Please try again shortly.' });
+                }
             } catch (sendError) {
                 console.error('Failed to send song error message:', sendError.message);
             }

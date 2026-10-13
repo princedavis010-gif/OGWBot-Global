@@ -190,12 +190,11 @@ async function handleToVid({ sock, m, sender, getContextInfo }) {
         }, { quoted: m });
     } catch (error) {
         console.error('Video sticker conversion error:', error);
-        const errorCode = getNestedErrorCode(error);
-        const message = errorCode === 'ENOTFOUND' || errorCode === 'EAI_AGAIN'
-            ? `❌ Failed to process the sticker file.` : '❌ Failed to process the sticker file.';
-        await sock.sendMessage(sender, {
-            text: message
-        }, { quoted: m });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, {
+                text: 'Could not complete that action. Please try again later.'
+            }, { quoted: m });
+        }
     } finally {
         if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -299,9 +298,11 @@ async function handleToVid({ sock, m, sender, sleep, getContextInfo }) {
         }, { quoted: m });
     } catch (error) {
         console.error('Video sticker conversion error:', error);
-        await sock.sendMessage(sender, {
-            text: '❌ Failed to convert the animated/video sticker to MP4.'
-        }, { quoted: m });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, {
+                text: 'Could not complete that action. Please try again later.'
+            }, { quoted: m });
+        }
     } finally {
         if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
     }

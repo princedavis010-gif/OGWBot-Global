@@ -56,7 +56,10 @@ async function handleAdd({ sock, m, sender, text, sleep }) {
 
     } catch (error) {
         console.error("Add members error:", error);
-        await sock.sendMessage(sender, { text: "❌ Failed to add users. Make sure I am an admin with the right permissions!" }, { quoted: m });
+       // await sock.sendMessage(sender, { text: "❌ Failed to add users. Make sure I am an admin with the right permissions!" }, { quoted: m });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, { text: 'Could not complete that action. Please try again later.' }, { quoted: m });
+        }
     }
 }
 

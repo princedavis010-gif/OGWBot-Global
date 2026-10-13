@@ -27,6 +27,8 @@ module.exports = async function handleImagine({ sock, m, sender, text, sleep }) 
 
     } catch (error) {
         console.error("Image generation error:", error);
-        await sock.sendMessage(sender, { text: `❌ Image generation failed: ${error.message}` });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, { text: 'Image generation failed. Please try again later.' });
+        }
     }
 };

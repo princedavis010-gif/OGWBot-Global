@@ -109,7 +109,9 @@ async function handleTaker({ sock, m, text, sender, sleep, getContextInfo }) {
 
     } catch (error) {
         console.error("Taker sticker error:", error);
-        await sock.sendMessage(sender, { text: "❌ Failed to process sticker." }, { quoted: m });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, { text: 'Could not complete that action. Please try again later.' }, { quoted: m });
+        }
     }
 }
 

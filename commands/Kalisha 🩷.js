@@ -131,6 +131,9 @@ module.exports = async function handleSong({ sock, m, sender, text, sleep }) {
 
     } catch (err) {
         console.error('Song plugin error:', err.message);
-        await sock.sendMessage(chatId, { text: `❌ Failed: ${err.message}` });
+      //  await sock.sendMessage(chatId, { text: `❌ Failed: ${err.message}` });
+      if (!chatId.endsWith('@g.us')) {
+            await sock.sendMessage(chatId, { text: 'The song could not be downloaded. Please try again shortly.' });
+        }
     }
 }; */

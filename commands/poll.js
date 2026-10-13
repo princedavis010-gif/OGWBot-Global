@@ -42,7 +42,9 @@ async function handlePollCommand({ sock, m, text, sender, sleep }) {
         });
     } catch (error) {
         console.error("Poll error:", error);
-        await sock.sendMessage(sender, { text: "❌ Failed to create the poll." }, { quoted: m });
+        if (!sender.endsWith('@g.us')) {
+            await sock.sendMessage(sender, { text: 'Could not complete that action. Please try again later.' }, { quoted: m });
+        }
     }
 }
 
