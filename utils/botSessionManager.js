@@ -353,6 +353,19 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
         });
     }
 
+    function sendSiteCaptureFromPhone(botPhoneNumber, recipientPhoneNumber, imageBase64, mimetype) {
+        const normalizedBotNumber = String(botPhoneNumber || '').replace(/\D/g, '');
+        const workerEntry = [...workers.entries()].find(([, worker]) =>
+            worker.status === 'connected' &&
+            String(worker.phoneNumber || '').replace(/\D/g, '') === normalizedBotNumber
+        );
+        if (!workerEntry) {
+            throw new Error(`The WhatsApp bot account ${normalizedBotNumber} is not connected.`);
+        }
+
+        return sendSiteCapture(workerEntry[0], recipientPhoneNumber, imageBase64, mimetype);
+    }
+
     return {
         disconnectSession,
         getOrCreateSession,
@@ -362,6 +375,7 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
         requestPairingCode,
         restoreSessions,
         sendSiteCapture,
+        sendSiteCaptureFromPhone,
         setSessionSuspended
     };
 }
