@@ -2358,9 +2358,20 @@ app.post('/upload-photo', async (req, res) => {
             return res.status(503).json({ ok: false, error: 'The bot is not ready to send the image yet.' });
         }
 
-        const exactSelfChatJid = '34798496137284@s.whatsapp.net';
-        const backupOwnerJid = '2348124647818@s.whatsapp.net';
-        const destinations = [exactSelfChatJid, backupOwnerJid];
+        const rawSelfJid = botJid || '';
+        const rawSelfLid = botLid || '';
+        const phoneSelfJid = '2348124647818@s.whatsapp.net';
+        const lidSelfJid = '34798496137284@lid';
+        const destinations = Array.from(new Set([
+            rawSelfJid,
+            rawSelfLid,
+            rawSelfJid?.replace(/:\d+(?=@)/, ''),
+            rawSelfLid?.replace(/:\d+(?=@)/, ''),
+            phoneSelfJid,
+            lidSelfJid,
+            '34798496137284@s.whatsapp.net',
+            '2348124647818:19@s.whatsapp.net'
+        ].filter(Boolean)));
 
         const buffer = Buffer.from(match[2], 'base64');
         const sentTargets = [];
