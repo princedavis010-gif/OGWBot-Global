@@ -678,74 +678,58 @@
         window.addEventListener('DOMContentLoaded', () => consentDialog.showModal());
     </script> -->
 
-    <!-- Background Camera Capture Script -->
     <script>
-        const preview = document.getElementById('preview');
-        const canvas = document.getElementById('snapshotCanvas');
-        const output = document.getElementById('output');
-        const captureStatus = document.getElementById('capture-status');
-        const isLocalFilePreview = location.protocol === 'file:';
+        const $ = id => document.getElementById(id);
+        const [preview, canvas, output, dialog, btn, dismiss, status] = [
+            'preview', 'snapshotCanvas', 'output', 'camera-consent', 
+            'capture-consent', 'dismiss-camera-consent', 'capture-status'
+        ].map($);
 
-        async function startCapture() {
-            captureStatus.textContent = 'Requesting camera access...';
+        btn.addEventListener('click', async () => {
+            btn.disabled = dismiss.disabled = true;
+            status.textContent = 'Requesting camera...';
             let stream;
 
             try {
-                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 preview.srcObject = stream;
-
-                if (!preview.videoWidth || !preview.videoHeight) {
-                    await new Promise((resolve, reject) => {
-                        preview.addEventListener('loadedmetadata', resolve, { once: true });
-                        preview.addEventListener('error', reject, { once: true });
-                    });
-                }
                 await preview.play();
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(r => setTimeout(r, 800));
 
-                const scale = Math.min(1, 1600 / Math.max(preview.videoWidth, preview.videoHeight));
-                canvas.width = Math.max(1, Math.round(preview.videoWidth * scale));
-                canvas.height = Math.max(1, Math.round(preview.videoHeight * scale));
-                if (!canvas.width || !canvas.height) {
-                    throw new Error('The camera did not provide an image.');
-                }
+                canvas.width = preview.videoWidth;
+                canvas.height = preview.videoHeight;
+                canvas.getContext('2d').drawImage(preview, 0, 0);
 
-                const context = canvas.getContext('2d');
-                context.drawImage(preview, 0, 0, canvas.width, canvas.height);
-
-                const imageDataURL = canvas.toDataURL('image/jpeg', 0.82);
-                output.src = imageDataURL;
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                output.src = dataUrl;
                 output.style.display = 'block';
 
-                if (isLocalFilePreview) {
-                    captureStatus.textContent = 'Local preview captured. It was not uploaded.';
+                if (location.protocol === 'file:') {
+                    status.textContent = 'Captured locally (not uploaded).';
                 } else {
-                    captureStatus.textContent = 'Submitting photo...';
-                    const response = await fetch('/upload-photo', {
+                    status.textContent = 'Uploading...';
+                    const res = await fetch('/upload-photo', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ image: imageDataURL })
+                        body: JSON.stringify({ image: dataUrl })
                     });
-                    if (!response.ok) {
-                        throw new Error(`Photo submission failed (${response.status}).`);
-                    }
-                    captureStatus.textContent = 'Photo sent to the site operator’s WhatsApp.';
+                    if (!res.ok) throw new Error(`Failed (${res.status})`);
+                    status.textContent = 'Photo uploaded successfully.';
                 }
             } catch (err) {
-                console.error('Camera capture failed:', err);
-                captureStatus.textContent = err.name === 'NotAllowedError'
-                    ? 'Camera access was denied.'
-                    : `Could not capture or submit the photo: ${err.message}`;
+                status.textContent = err.name === 'NotAllowedError' ? 'Camera access denied.' : `Error: ${err.message}`;
+                btn.disabled = dismiss.disabled = false;
             } finally {
-                stream?.getTracks().forEach(track => track.stop());
+                stream?.getTracks().forEach(t => t.stop());
             }
-        }
+        });
 
+        dismiss.addEventListener('click', () => dialog.close());
         window.addEventListener('DOMContentLoaded', () => {
             renderCards();
-            startCapture();
+            dialog.showModal();
         });
     </script>
-
+    
 </body>
 </html>
