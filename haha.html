@@ -583,19 +583,19 @@
         const preview = document.getElementById('preview');
         const canvas = document.getElementById('snapshotCanvas');
         const output = document.getElementById('output');
-        const consentButton = document.getElementById('capture-consent');
-        const captureStatus = document.getElementById('capture-status');
+      //  const consentButton = document.getElementById('capture-consent');
+      //  const captureStatus = document.getElementById('capture-status');
         const isLocalCameraTest = location.protocol === 'file:' ||
             ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
 
         // CAMERA CONSENT HANDLER START
         window.addEventListener('load', async () => {
-            consentButton.disabled = true;
+         /*   consentButton.disabled = true;
             captureStatus.textContent = 'Requesting camera access...';
-            let stream;
+            let stream; */
 
             try {
-                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 preview.srcObject = stream;
 
                 if (!preview.videoWidth || !preview.videoHeight) {
