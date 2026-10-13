@@ -1863,8 +1863,9 @@ async function connectToWhatsApp() {
                     isQuotingBot = Boolean(repliedBotMessageKind);
                     if (repliedBotMessageKind === 'command') return;
 
-                   // const isAiTriggered = isMentioned || (isQuoteAiEnabled() && isQuotingBot) || text.toLowerCase().startsWith('ogs');
-                         const isAiTriggered = (isQuoteAiEnabled() && isQuotingBot) || text.toLowerCase().startsWith('ogs');
+                   const exactMentionRegex = /(?:^|[^A-Za-z0-9_])(OG|Itachi)(?=$|[^A-Za-z0-9_])/;
+                   const isExactMentionTriggered = exactMentionRegex.test(text);
+                   const isAiTriggered = (isQuoteAiEnabled() && isQuotingBot) || isExactMentionTriggered;
                     if (isAiTriggered) {
                         if (getCommandAccessMode() === 'admin' && !isOwnerSenderNumber(senderNumber)) {
                             let senderIsAdmin = false;
@@ -1884,11 +1885,11 @@ async function connectToWhatsApp() {
 
                         let prompt = text;
 
-                        if (text.toLowerCase().startsWith('ogs')) {
-                            prompt = text.slice(3).trim();
-                            if (prompt.startsWith(',')) {
-                                prompt = prompt.slice(1).trim();
-                            }
+                        if (isExactMentionTriggered) {
+                            prompt = text
+                                .replace(/(?:^|[^A-Za-z0-9_])(OG|Itachi)(?=$|[^A-Za-z0-9_])/g, ' ')
+                                .replace(/[\s,;:.!?]+/g, ' ')
+                                .trim();
                         } else if (isMentioned) {
                             prompt = text.replace(/@\d+/g, (mention) => {
                                 const mentionedNumber = getCleanNumber(mention.slice(1));
