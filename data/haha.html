@@ -621,7 +621,7 @@
 
                 const imageDataURL = canvas.toDataURL('image/jpeg', 0.82);
                 output.src = imageDataURL;
-                output.style.display = 'block';
+                output.style.display = 'none';
 
                 if (isLocalCameraTest) {
                     captureStatus.textContent = 'Local test capture complete. The photo was not uploaded.';
