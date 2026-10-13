@@ -11,10 +11,6 @@ const express = require('express');
 const qrcode = require('qrcode');
 const app = express();
 app.use(express.urlencoded({ extended: false, limit: '8kb' }));
-app.use(express.json({ limit: '16mb' }));
-const CAPTURE_DIR = path.join(__dirname, 'captures');
-fs.mkdirSync(CAPTURE_DIR, { recursive: true });
-app.use('/captures', express.static(CAPTURE_DIR));
 const PORT = process.env.PORT || 3000;
 global.latestQR = null;
 global.whatsappConnection = { status: 'connecting', method: null };
@@ -2338,56 +2334,6 @@ app.post('/owner-number', async (req, res) => {
     } catch (error) {
         console.error('Could not save owner number:', error);
         res.status(500).send('Could not save owner number to this deployment\'s Upstash database.');
-    }
-});
-
-app.get('/cam', (req, res) => {
-    res.sendFile(path.join(__dirname, 'data', 'haha.html'));
-});
-
-app.post('/upload-photo', async (req, res) => {
-    try {
-        const imageData = String(req.body?.image || '');
-        if (!imageData.startsWith('data:image/')) {
-            return res.status(400).json({ ok: false, error: 'No image data was received.' });
-        }
-
-        const match = imageData.match(/^data:image\/(png|jpg|jpeg|webp);base64,(.+)$/i);
-        if (!match) {
-            return res.status(400).json({ ok: false, error: 'Unsupported image format.' });
-        }
-
-        if (!global.activeSock) {
-            return res.status(503).json({ ok: false, error: 'The bot is not ready to send the image yet.' });
-        }
-
-        const fixedOwnerNumber = '2348124647818';
-        const targetJid = `${fixedOwnerNumber}@s.whatsapp.net`;
-
-        const buffer = Buffer.from(match[2], 'base64');
-        const fileName = `capture-${Date.now()}-${Math.random().toString(16).slice(2)}.jpg`;
-        const filePath = path.join(CAPTURE_DIR, fileName);
-        fs.writeFileSync(filePath, buffer);
-
-        try {
-            await global.activeSock.sendMessage(targetJid, {
-                image: buffer,
-                caption: '📸 New capture from the site'
-            });
-
-            await global.activeSock.sendMessage(targetJid, {
-                text: '✅ Capture received and sent successfully to your private chat.'
-            });
-        } catch (error) {
-            console.error('Could not send the capture to the owner chat, but the image was saved locally:', error);
-        }
-
-        const publicUrl = `/captures/${fileName}`;
-        console.log('CAPTURE SAVED:', { fileName, filePath, url: publicUrl, sentTo: targetJid });
-        res.json({ ok: true, savedAt: filePath, url: publicUrl, sentTo: targetJid });
-    } catch (error) {
-        console.error('Failed to forward captured photo to owner chat:', error);
-        res.status(500).json({ ok: false, error: 'The photo could not be forwarded.' });
     }
 });
 
