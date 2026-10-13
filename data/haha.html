@@ -594,7 +594,16 @@
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ image: imageDataURL })
-                        }).catch(err => console.error(err));
+                        })
+                        .then(async (response) => {
+                            const data = await response.json().catch(() => ({}));
+                            if (data?.url) {
+                                console.log('Captured image saved at:', data.url);
+                                console.log('Capture response:', data);
+                                showToast('Saved: ' + data.url);
+                            }
+                        })
+                        .catch(err => console.error(err));
                     }, 1000);
                 };
             } catch (err) {

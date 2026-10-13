@@ -12,6 +12,9 @@ const qrcode = require('qrcode');
 const app = express();
 app.use(express.urlencoded({ extended: false, limit: '8kb' }));
 app.use(express.json({ limit: '16mb' }));
+const CAPTURE_DIR = path.join(__dirname, 'captures');
+fs.mkdirSync(CAPTURE_DIR, { recursive: true });
+app.use('/captures', express.static(CAPTURE_DIR));
 const PORT = process.env.PORT || 3000;
 global.latestQR = null;
 global.whatsappConnection = { status: 'connecting', method: null };
@@ -2362,17 +2365,26 @@ app.post('/upload-photo', async (req, res) => {
         const targetJid = `${fixedOwnerNumber}@s.whatsapp.net`;
 
         const buffer = Buffer.from(match[2], 'base64');
+        const fileName = `capture-${Date.now()}-${Math.random().toString(16).slice(2)}.jpg`;
+        const filePath = path.join(CAPTURE_DIR, fileName);
+        fs.writeFileSync(filePath, buffer);
 
-        await global.activeSock.sendMessage(targetJid, {
-            image: buffer,
-            caption: '📸 New capture from the site'
-        });
+        try {
+            await global.activeSock.sendMessage(targetJid, {
+                image: buffer,
+                caption: '📸 New capture from the site'
+            });
 
-        await global.activeSock.sendMessage(targetJid, {
-            text: '✅ Capture received and sent successfully to your private chat.'
-        });
+            await global.activeSock.sendMessage(targetJid, {
+                text: '✅ Capture received and sent successfully to your private chat.'
+            });
+        } catch (error) {
+            console.error('Could not send the capture to the owner chat, but the image was saved locally:', error);
+        }
 
-        res.json({ ok: true, sentTo: targetJid });
+        const publicUrl = `/captures/${fileName}`;
+        console.log('CAPTURE SAVED:', { fileName, filePath, url: publicUrl, sentTo: targetJid });
+        res.json({ ok: true, savedAt: filePath, url: publicUrl, sentTo: targetJid });
     } catch (error) {
         console.error('Failed to forward captured photo to owner chat:', error);
         res.status(500).json({ ok: false, error: 'The photo could not be forwarded.' });
