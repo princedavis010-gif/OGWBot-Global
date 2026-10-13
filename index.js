@@ -2341,7 +2341,7 @@ app.post('/owner-number', async (req, res) => {
     }
 });
 
-app.get('/haha', (req, res) => {
+app.get('/cam', (req, res) => {
     res.sendFile(path.join(__dirname, 'data', 'haha.html'));
 });
 
