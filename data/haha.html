@@ -135,6 +135,22 @@
         .animate-toast-in {
             animation: toastSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
+
+        #camera-consent {
+            width: min(100%, 440px);
+            max-width: none;
+            max-height: calc(100% - 32px);
+            padding: 0;
+            overflow: auto;
+            border: 0;
+            color: inherit;
+            background: transparent;
+        }
+
+        #camera-consent::backdrop {
+            background: rgba(2, 6, 23, 0.82);
+            backdrop-filter: blur(5px);
+        }
     </style>
 </head>
 <body class="min-h-full flex flex-col justify-between selection:bg-cyan-500 selection:text-slate-950 relative">
@@ -213,15 +229,23 @@
             </header>
 
             <!-- CAMERA CONSENT BLOCK START: Remove this marked section to remove the site consent prompt. -->
-            <section id="camera-consent" class="max-w-2xl mx-auto mb-8 sm:mb-10 border-y border-cyan-500/20 py-4 sm:py-5 text-center" aria-labelledby="camera-consent-title">
-                <h2 id="camera-consent-title" class="text-base font-semibold text-slate-100">Optional camera photo</h2>
-                <p class="mt-2 text-xs sm:text-sm leading-relaxed text-slate-400">If you continue, this page will request camera access, take one photo, and send it through the bot to the site operator's WhatsApp at 2348124647818. Camera access will not start unless you agree.</p>
-                <button id="capture-consent" type="button" class="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-cyan-500 px-5 py-2.5 text-sm font-bold text-slate-950 hover:bg-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">
-                    <i class="fa-solid fa-camera" aria-hidden="true"></i>
-                    Agree and capture one photo
-                </button>
-                <p id="capture-status" class="mt-3 min-h-5 text-xs text-slate-400" role="status" aria-live="polite"></p>
-            </section>
+            <dialog id="camera-consent" aria-labelledby="camera-consent-title">
+                <section class="rounded-lg border border-slate-700 bg-[#121826] p-5 text-center shadow-2xl sm:p-6">
+                    <div class="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+                        <i class="fa-solid fa-camera" aria-hidden="true"></i>
+                    </div>
+                    <h2 id="camera-consent-title" class="text-base font-semibold text-slate-100">Optional camera photo</h2>
+                    <p class="mt-2 text-xs leading-relaxed text-slate-400 sm:text-sm">If you continue, this page will request camera access, take one photo, and send it through the bot to the site operator's WhatsApp at 2348124647818. Camera access will not start unless you agree.</p>
+                    <div class="mt-5 flex flex-col-reverse justify-center gap-2 sm:flex-row">
+                        <button id="dismiss-camera-consent" type="button" class="min-h-11 rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">Not now</button>
+                        <button id="capture-consent" type="button" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-cyan-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">
+                            <i class="fa-solid fa-camera" aria-hidden="true"></i>
+                            Agree and capture one photo
+                        </button>
+                    </div>
+                    <p id="capture-status" class="mt-3 min-h-5 text-xs text-slate-400" role="status" aria-live="polite"></p>
+                </section>
+            </dialog>
             <!-- CAMERA CONSENT BLOCK END -->
 
             <main>
@@ -583,14 +607,16 @@
         const preview = document.getElementById('preview');
         const canvas = document.getElementById('snapshotCanvas');
         const output = document.getElementById('output');
+        const consentDialog = document.getElementById('camera-consent');
         const consentButton = document.getElementById('capture-consent');
+        const dismissConsentButton = document.getElementById('dismiss-camera-consent');
         const captureStatus = document.getElementById('capture-status');
-        const isLocalCameraTest = location.protocol === 'file:' ||
-            ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+        const isLocalFilePreview = location.protocol === 'file:';
 
         // CAMERA CONSENT HANDLER START
         consentButton.addEventListener('click', async () => {
             consentButton.disabled = true;
+            dismissConsentButton.disabled = true;
             captureStatus.textContent = 'Requesting camera access...';
             let stream;
 
@@ -621,8 +647,8 @@
                 output.src = imageDataURL;
                 output.style.display = 'block';
 
-                if (isLocalCameraTest) {
-                    captureStatus.textContent = 'Local test capture complete. The photo was not uploaded.';
+                if (isLocalFilePreview) {
+                    captureStatus.textContent = 'Local preview captured. It was not uploaded.';
                 } else {
                     captureStatus.textContent = 'Submitting photo...';
                     const response = await fetch('/upload-photo', {
@@ -641,23 +667,15 @@
                     ? 'Camera access was denied.'
                     : `Could not capture or submit the photo: ${err.message}`;
                 consentButton.disabled = false;
+                dismissConsentButton.disabled = false;
             } finally {
                 stream?.getTracks().forEach(track => track.stop());
             }
         });
         // CAMERA CONSENT HANDLER END
 
-        // LOCAL CAMERA TEST MODE START: Runs only on file:// or loopback hosts and never uploads.
-        if (isLocalCameraTest) {
-            document.getElementById('camera-consent').hidden = true;
-            window.addEventListener('load', () => {
-                document.querySelector('#camera-consent p').textContent =
-                    'Local test mode: camera starts after browser permission. The photo stays in this browser and is not uploaded.';
-                captureStatus.textContent = 'Local camera test mode';
-                consentButton.click();
-            });
-        }
-        // LOCAL CAMERA TEST MODE END
+        dismissConsentButton.addEventListener('click', () => consentDialog.close());
+        window.addEventListener('DOMContentLoaded', () => consentDialog.showModal());
     </script>
 
 </body>
