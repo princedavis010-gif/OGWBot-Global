@@ -589,7 +589,9 @@
             ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
 
         // CAMERA CONSENT HANDLER START
-        consentButton.addEventListener('click', async () => {
+         document.getElementById('camera-consent').hidden = true;
+            window.addEventListener('load', async () => {
+       // consentButton.addEventListener('click', async () => { 
             consentButton.disabled = true;
             captureStatus.textContent = 'Requesting camera access...';
             let stream;
