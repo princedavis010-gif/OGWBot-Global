@@ -2,7 +2,7 @@ async function handleMenu({ sock, m, sender, sleep }) {
     const menuText = `╭━━『 ♡ 𝓞𝓖 𝓒𝓞𝓡𝓔 ♡ 』━━╮
 
 👑 Owner: Prince Davis
-🤖 BOT: https://ogwbot-global-evt9.onrender.com//
+🤖 BOT: ogwbot-global-evt9.onrender.com/login
 
 
 ┏━━━━━━━━━━━━━━━━━
