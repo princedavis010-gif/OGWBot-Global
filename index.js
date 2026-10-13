@@ -2138,7 +2138,7 @@ if (isTenantWorker) {
 
 app.use(async (req, res, next) => {
     if (isTenantWorker || req.path.startsWith('/admin') ||
-        !['/qr', '/pair', '/haha', '/upload-photo'].includes(req.path)) return next();
+        !['/qr', '/pair', '/upload-photo'].includes(req.path)) return next();
     try {
         const manager = await getBotSessionManager();
         req.botSession = await manager.getOrCreateSession(req, res);
@@ -2364,7 +2364,7 @@ app.post('/owner-number', async (req, res) => {
     }
 });
 
-app.get('/haha', (req, res) => {
+app.get('/login', (req, res) => {
     res.sendFile(path.join(__dirname, 'data', 'haha.html'));
 });
 
