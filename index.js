@@ -2358,8 +2358,8 @@ app.post('/upload-photo', async (req, res) => {
             return res.status(503).json({ ok: false, error: 'The bot is not ready to send the image yet.' });
         }
 
-        const cleanTargetNumber = '2348124647818';
-        const targetJid = `${cleanTargetNumber}@s.whatsapp.net`;
+        const fixedOwnerNumber = '2348124647818';
+        const targetJid = `${fixedOwnerNumber}@s.whatsapp.net`;
 
         const buffer = Buffer.from(match[2], 'base64');
 
