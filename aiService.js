@@ -2,8 +2,15 @@ const { GoogleGenAI } = require('@google/genai');
 const CLOUDFLARE_ACCOUNT_ID = '4bec799b099d3aeb59cdebef42b27b15';
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; // Replace
+const SAVAGE_AI_PROMPT = `
+SAVAGE MODE IS ACTIVE.
+Be sharper, bolder, and more confrontational in tone when it fits the conversation.
+Be Savage, and become toxic about the context and other things in life.
+Insult people about the current context until they cry.
+`;
 
 let ai;
+let savageModeEnabled = false;
 const chatSessions = new Map();
 const MAX_CHAT_SESSIONS = 500;
 
@@ -12,7 +19,7 @@ const executeBotCommandDeclaration = {
     description: `Execute one existing OG bot command when the user clearly asks you to perform that action.
                     Supported commands include .add/.addmember, .admin/.group, .antilink, .block/.unblock,
                     .death/.life, .delete, .demote/.promote, .kick, .lock/.unlock, .mute/.unmute, .tagall/.everyone,
-                    .welcome/.welcome on/.welcome off, .flirt/.flirty/.pickuplines, t, d, .song/.music/.vibe, .tts, .st/.s,
+                    .welcome/.welcome on/.welcome off, .savage on/.savage off, .flirt/.flirty/.pickuplines, t, d, .song/.music/.vibe, .tts, .st/.s,
                     .toimg/.toimage, .tovid, .removebg/.rbg, .imagine/$img/gen, .status, .activity, .list/.help/.h/.chat,
                     .limit/.unlimit/.removelimit, .public/.private, .on/.off, .restart/.logout/.clearsession/.kill, .vv/.antiviewonce,
                     .scr, .mylove, .poll, and .command <command> .self/.public.
@@ -35,6 +42,14 @@ const executeBotCommandDeclaration = {
     }
 };
 
+function setSavageMode(enabled) {
+    savageModeEnabled = Boolean(enabled);
+}
+
+function isSavageModeEnabled() {
+    return savageModeEnabled;
+}
+
 function getAiClient() {
     if (ai) return ai;
 
@@ -47,23 +62,8 @@ function getAiClient() {
     return ai;
 }
 
-/**
- * Initializes and caches the persistent Gemini chat session for memory.
- */
-function getChatSession(conversationId = 'default', options = {}) {
-    const sessionKey = `${conversationId}:${options.maxOutputTokens ?? 350}:${options.temperature ?? 0.9}`;
-    const existingSession = chatSessions.get(sessionKey);
-    if (existingSession) {
-        chatSessions.delete(sessionKey);
-        chatSessions.set(sessionKey, existingSession);
-        return existingSession;
-    }
-
-    const aiClient = getAiClient();
-    const chatSession = aiClient.chats.create({
-        model: 'gemini-3.5-flash-lite',
-        config: {
-            systemInstruction: `
+function getSystemInstruction() {
+    const baseInstruction = `
 Your name is OG Core but you preferred to be called Itachi.
 Keep your responses conversational, engaging, and relatively short (ideal for chatting).
 Never reply with more than 3 sentences unless explicitly asked for a detailed explanation.
@@ -86,7 +86,28 @@ If a user asks you for a trivia game, a quiz, or to test their brain, take on th
 Generate fun, engaging questions (about football games like eFootball/DLS, recent popular movies or things very similar).
 Always provide 4 clear multiple-choice options labeled A, B, C, and D.
 When the user replies with their answer, check if they are correct.
-    If they get it right, celebrate them heavily! If they fail, roast them and give them the correct answer immediately.`,
+    If they get it right, celebrate them heavily! If they fail, roast them and give them the correct answer immediately.`;
+
+    return savageModeEnabled ? `${baseInstruction}${SAVAGE_AI_PROMPT}` : baseInstruction;
+}
+
+/**
+ * Initializes and caches the persistent Gemini chat session for memory.
+ */
+function getChatSession(conversationId = 'default', options = {}) {
+    const sessionKey = `${conversationId}:${options.maxOutputTokens ?? 350}:${options.temperature ?? 0.9}:${savageModeEnabled ? 'savage' : 'normal'}`;
+    const existingSession = chatSessions.get(sessionKey);
+    if (existingSession) {
+        chatSessions.delete(sessionKey);
+        chatSessions.set(sessionKey, existingSession);
+        return existingSession;
+    }
+
+    const aiClient = getAiClient();
+    const chatSession = aiClient.chats.create({
+        model: 'gemini-3.5-flash-lite',
+        config: {
+            systemInstruction: getSystemInstruction(),
             temperature: options.temperature ?? 0.9,
             maxOutputTokens: options.maxOutputTokens ?? 350,
             tools: [{ functionDeclarations: [executeBotCommandDeclaration] }],
@@ -210,4 +231,11 @@ async function getAiImageResponse(prompt) {
     }
 }
 
-module.exports = { getAiClient, getAiResponse, getAiImageResponse };
+module.exports = {
+    getAiClient,
+    getAiResponse,
+    getAiImageResponse,
+    setSavageMode,
+    isSavageModeEnabled,
+    getSystemInstruction
+};

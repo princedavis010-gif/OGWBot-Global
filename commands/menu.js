@@ -41,6 +41,7 @@ async function handleMenu({ sock, m, sender, sleep }) {
 ┗━━━━━━━━━━━━━━━━━
 │ ➜ OG
 │ ➜ $img
+│ ➜ .savage on / .savage off
 
 
 ┏━━━━━━━━━━━━━━━━━

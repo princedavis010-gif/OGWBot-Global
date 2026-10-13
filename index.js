@@ -37,6 +37,8 @@ const {
 } = require('./utils/commandAccess');
 const handleWelcomeOn = require('./commands/welcomeon');
 const handleWelcomeOff = require('./commands/welcomeoff');
+const handleSavageOn = require('./commands/savageon');
+const handleSavageOff = require('./commands/savageoff');
 const handleBlock = require('./commands/block');
 const handleUnblock = require('./commands/unblock');
 const handleLimit = require('./commands/limit');
@@ -1468,6 +1470,16 @@ async function connectToWhatsApp() {
 
                     if (text.toLowerCase() === '.welcome off') {
                         await handleWelcomeOff({ sock, m, sender, senderNumber, OWNER_NUMBER, botPhoneNumber, sleep });
+                        return;
+                    }
+
+                    if (text.toLowerCase() === '.savage on') {
+                        await handleSavageOn({ sock, m, sender, senderNumber, OWNER_NUMBER, botPhoneNumber, sleep });
+                        return;
+                    }
+
+                    if (text.toLowerCase() === '.savage off') {
+                        await handleSavageOff({ sock, m, sender, senderNumber, OWNER_NUMBER, botPhoneNumber, sleep });
                         return;
                     }
 
