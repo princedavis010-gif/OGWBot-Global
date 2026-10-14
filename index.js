@@ -72,7 +72,7 @@ const handleWelcome = require('./commands/welcome');
 const handleRemoveBg = require('./commands/handleRemoveBg');
 const handlePollCommand = require('./commands/poll');
 const handleSong = require('./commands/song');
-const { handleQuoteToggle, isQuoteAiEnabled } = require('./commands/quoteToggle');
+const { handleAiToggle, handleQuoteToggle, isAiEnabled, isQuoteAiEnabled } = require('./commands/quoteToggle');
 const { isUserMuted } = require('./utils/mutedStorage');
 const { handleMute, handleUnmute } = require('./commands/mute');
 const { handleFlirt } = require('./commands/flirt');
@@ -1618,6 +1618,13 @@ async function connectToWhatsApp() {
 
                     // .imagine / .image Command
                     if (text.toLowerCase().startsWith('$img') || text.toLowerCase().startsWith('gen') || text.toLowerCase().startsWith('.imagine')) {
+                       
+                        if (typeof sock.isPremium !== 'function' || !(await sock.isPremium())) {
+    await sock.sendMessage(sender, {
+        text: 'This command is for Premium accounts.'
+    }, { quoted: m });
+    return;
+}
                         await handleImagine({ sock, m, sender, text, sleep });
                         return;
                     }
@@ -1642,6 +1649,11 @@ async function connectToWhatsApp() {
                     }
 
                     const cleanText = text.toLowerCase().trim();
+                    if (cleanText === '.ai' || cleanText.startsWith('.ai ')) {
+                        await handleAiToggle({ sock, m, sender, text, senderNumber, OWNER_NUMBER, botPhoneNumber });
+                        return;
+                    }
+
                     if (cleanText === '.flirt' || cleanText.startsWith('.flirt ') ||
                         cleanText === '.flirty' || cleanText.startsWith('.flirty ') ||
                         cleanText === '.pickuplines' || cleanText.startsWith('.pickuplines ')) {
@@ -1868,7 +1880,7 @@ async function connectToWhatsApp() {
 
                    const exactMentionRegex = /(?:^|[^A-Za-z0-9_])(OG|Itachi)(?=$|[^A-Za-z0-9_])/;
                    const isExactMentionTriggered = exactMentionRegex.test(text);
-                   const isAiTriggered = (isQuoteAiEnabled() && isQuotingBot) || isExactMentionTriggered;
+                   const isAiTriggered = isAiEnabled() && ((isQuoteAiEnabled() && isQuotingBot) || isExactMentionTriggered);
                     if (isAiTriggered) {
                         if (getCommandAccessMode() === 'admin' && !isOwnerSenderNumber(senderNumber)) {
                             let senderIsAdmin = false;

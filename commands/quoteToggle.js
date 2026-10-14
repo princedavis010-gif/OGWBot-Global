@@ -1,6 +1,34 @@
 const { matchesOwnerNumber } = require('../utils/ownerAccess');
 
 let quoteReplyAiEnabled = true; // Enabled by default
+let aiEnabled = true;
+
+async function handleAiToggle({ sock, m, sender, text, senderNumber, OWNER_NUMBER, botPhoneNumber }) {
+    const cleanText = text.toLowerCase().trim();
+    if (!['.ai on', '.ai off'].includes(cleanText)) {
+        await sock.sendMessage(sender, {
+            text: 'Usage: .ai on or .ai off'
+        }, { quoted: m });
+        return true;
+    }
+
+    if (!matchesOwnerNumber(senderNumber, OWNER_NUMBER, botPhoneNumber)) {
+        await sock.sendMessage(sender, {
+            text: '❌ Only the bot owner can change AI mode.'
+        }, { quoted: m });
+        return true;
+    }
+
+    aiEnabled = cleanText === '.ai on';
+    await sock.sendMessage(sender, {
+        text: `AI replies are now ${aiEnabled ? 'enabled' : 'disabled'}.`
+    }, { quoted: m });
+    return true;
+}
+
+function isAiEnabled() {
+    return aiEnabled;
+}
 
 async function handleQuoteToggle({ sock, m, sender, text, senderNumber, OWNER_NUMBER, botPhoneNumber, sleep }) {
     const cleanText = text.toLowerCase().trim();
@@ -34,4 +62,4 @@ function isQuoteAiEnabled() {
     return quoteReplyAiEnabled;
 }
 
-module.exports = { handleQuoteToggle, isQuoteAiEnabled };
+module.exports = { handleAiToggle, handleQuoteToggle, isAiEnabled, isQuoteAiEnabled };
