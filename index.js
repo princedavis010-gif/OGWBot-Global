@@ -1027,17 +1027,9 @@ async function connectToWhatsApp() {
                 }, async () => {
 
                     if (activityAction) {
-                        const activityIdentity = await getActivityPhoneNumber({
-                            message: m,
-                            senderJid,
-                            senderNumber,
-                            getSenderNumber,
-                            resolveLid: (jid) => sock.signalRepository.lidMapping.getPNForLID(jid),
-                            resolveGroupPhone: (participantJids) => getGroupParticipantPhoneNumber(sock, sender, participantJids)
-                        });
                         void recordBotActivity(redis, {
-                            userNumber: m.pushName || activityIdentity.phoneNumber,
-                            userLid: activityIdentity.userLid,
+                            userNumber: m.pushName || senderIdentity.phoneNumber,
+                            userLid: senderIdentity.userLid,
                             chatJid: sender,
                             action: activityAction
                         }).catch((error) => {
@@ -1621,7 +1613,7 @@ async function connectToWhatsApp() {
                        
                         if (typeof sock.isPremium !== 'function' || !(await sock.isPremium())) {
     await sock.sendMessage(sender, {
-        text: 'This command is for Premium accounts.'
+        text: '❌ 𝚁𝙴𝚂𝚃𝚁𝙸𝙲𝚃𝙴𝙳.\n\n-YOU ARE NOT A PREMIUM USER'
     }, { quoted: m });
     return;
 }
