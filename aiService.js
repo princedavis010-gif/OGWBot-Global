@@ -107,7 +107,7 @@ function getChatSession(conversationId = 'default', options = {}) {
 
     const aiClient = getAiClient();
     const chatSession = aiClient.chats.create({
-        model: 'gemini-3-flash',
+        model: 'gemini-3.1-flash-lite',
         config: {
             systemInstruction: getSystemInstruction(),
             temperature: options.temperature ?? 0.9,
