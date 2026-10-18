@@ -1508,6 +1508,10 @@ async function connectToWhatsApp() {
                             return;
                         }
 
+                        if (text.toLowerCase() === '.logs') {
+    await require('./commands/logs')({ sock, m, remoteJid: m.key.remoteJid, sleep, redis });
+}
+
                         if (antiLinkCommand === '.antilink on') {
                             enableAntiLink(sender);
                             await sock.sendMessage(sender, { text: '✅ Anti-link enabled for this group.' }, { quoted: m });
@@ -1662,11 +1666,7 @@ async function connectToWhatsApp() {
                         await handleFlirt({ sock, m, sender, senderNumber, senderJid, sleep, logBotAction });
                         return;
                     }
-
-                    if (text.toLowerCase() === '.logs') {
-    await require('./commands/logs')({ sock, m, remoteJid: m.key.remoteJid, sleep });
-                    }
-
+                    
                     if (resolveCommandName(text) === 'lovetest') {
                         await handleLoveTest({ sock, m, sender, text, contextInfo });
                         return;
