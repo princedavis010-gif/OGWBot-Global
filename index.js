@@ -1468,6 +1468,15 @@ async function connectToWhatsApp() {
                         return;
                     }
 
+                    // Track group messages for active members leaderboard
+if (m.key.remoteJid.endsWith('@g.us') && !m.key.fromMe) {
+    const groupId = m.key.remoteJid;
+    const sender = m.key.participant || m.participant;
+    if (sender) {
+        await redis.hincrby(`group_logs:${groupId}`, sender, 1);
+    }
+}
+                    
                     if (text.toLowerCase() === '.savage on') {
                         await handleSavageOn({ sock, m, sender, senderNumber, OWNER_NUMBER, botPhoneNumber, sleep });
                         return;
