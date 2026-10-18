@@ -42,6 +42,7 @@ const handleWelcomeOn = require('./commands/welcomeon');
 const handleWelcomeOff = require('./commands/welcomeoff');
 const handleSavageOn = require('./commands/savageon');
 const handleSavageOff = require('./commands/savageoff');
+const handleLogs = require('./commands/logs');
 const handleBlock = require('./commands/block');
 const handleUnblock = require('./commands/unblock');
 const handleLimit = require('./commands/limit');
