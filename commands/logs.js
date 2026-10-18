@@ -1,4 +1,4 @@
-async function handleLogs({ sock, m, remoteJid, sleep, redis }) {
+async function handleLogs({ sock, m, remoteJid, sleep }) {
     if (!remoteJid.endsWith('@g.us')) {
         await sock.sendMessage(remoteJid, { text: "❌ This command can only be used inside group chats!" }, { quoted: m });
         return;
@@ -13,6 +13,7 @@ async function handleLogs({ sock, m, remoteJid, sleep, redis }) {
             return;
         }
 
+        // Sort members by message count descending and take top 10
         const sortedUsers = Object.entries(groupLogs)
             .sort((a, b) => Number(b[1]) - Number(a[1]))
             .slice(0, 10);
@@ -24,6 +25,7 @@ async function handleLogs({ sock, m, remoteJid, sleep, redis }) {
             text += `${index + 1}. @${tag} — *${count}* messages\n`;
         });
 
+        // Extract mentions for the tagged users
         const mentions = sortedUsers.map(([userJid]) => userJid);
 
         await sleep(500);
