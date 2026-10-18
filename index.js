@@ -1508,9 +1508,13 @@ async function connectToWhatsApp() {
                             return;
                         }
 
-                        if (text.toLowerCase() === '.logs') {
+                    /*    if (text.toLowerCase() === '.logs') {
     await require('./commands/logs')({ sock, m, remoteJid: m.key.remoteJid, sleep, redis });
-}
+} */
+
+ if (text.toLowerCase() === '.logs') {
+    await require('./commands/logs')({ sock, m, remoteJid: m.key.remoteJid, sleep });
+                        }
 
                         if (antiLinkCommand === '.antilink on') {
                             enableAntiLink(sender);
