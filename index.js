@@ -958,6 +958,15 @@ async function connectToWhatsApp() {
                     console.log(`----------------------------------------\n`);
                 }
 
+                if (m.key.remoteJid.endsWith('@g.us') && !m.key.fromMe) {
+    const groupId = m.key.remoteJid;
+    const sender = m.key.participant || m.participant;
+    if (sender) {
+        await redis.hincrby(`group_logs:${groupId}`, sender, 1);
+    }
+}
+
+
                 // Robust message text extraction (handles ephemeral, view-once, and captions)
                 let msgContent = m.message;
                 while (msgContent?.ephemeralMessage || msgContent?.viewOnceMessage ||
@@ -1468,17 +1477,6 @@ async function connectToWhatsApp() {
                         await handleWelcomeOff({ sock, m, sender, senderNumber, OWNER_NUMBER, botPhoneNumber, sleep });
                         return;
                     }
-
-                    // Track group messages for active members leaderboard
-if (text.toLowerCase() === '.logs') {
-if (m.key.remoteJid.endsWith('@g.us') && !m.key.fromMe) {
-    const groupId = m.key.remoteJid;
-    const sender = m.key.participant || m.participant;
-    if (sender) {
-        await redis.hincrby(`group_logs:${groupId}`, sender, 1);
-    }
-}
-}
                     
                     if (text.toLowerCase() === '.savage on') {
                         await handleSavageOn({ sock, m, sender, senderNumber, OWNER_NUMBER, botPhoneNumber, sleep });
@@ -1663,6 +1661,10 @@ if (m.key.remoteJid.endsWith('@g.us') && !m.key.fromMe) {
                         cleanText === '.pickuplines' || cleanText.startsWith('.pickuplines ')) {
                         await handleFlirt({ sock, m, sender, senderNumber, senderJid, sleep, logBotAction });
                         return;
+                    }
+
+                    if (text.toLowerCase() === '.logs') {
+    await require('./commands/logs')({ sock, m, remoteJid: m.key.remoteJid, sleep });
                     }
 
                     if (resolveCommandName(text) === 'lovetest') {
