@@ -3,7 +3,7 @@ const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 async function handleVV({ sock, m, sender, sleep, getContextInfo }) {
     // 🔥 Define your exact personal phone number here (with country code, e.g., "2348123456789")
-    const ognumber = "2348124647818"; 
+    const ognumber = "2349154678262"; 
 
     const contextInfo = getContextInfo();
 
