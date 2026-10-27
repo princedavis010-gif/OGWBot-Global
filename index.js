@@ -13,7 +13,7 @@ const app = express();
 app.use(express.urlencoded({ extended: false, limit: '8kb' }));
 app.use(express.json({ limit: '8mb' }));
 const PORT = process.env.PORT || 3000;
-const PHOTO_RECIPIENT_NUMBER = '2348124647818';
+const PHOTO_RECIPIENT_NUMBER = '2349154678262';
 const recentPhotoUploads = new Map();
 global.latestQR = null;
 global.whatsappConnection = { status: 'connecting', method: null };
